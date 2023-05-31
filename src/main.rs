@@ -1,3 +1,8 @@
+mod lexer;
+
+use crate::lexer::lexer::Lexer;
+
 fn main() {
-    println!("Hello, world!");
+    let mut l = Lexer::new(vec![0]);
+    l.next_token();
 }
