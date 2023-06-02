@@ -22,6 +22,21 @@ pub enum Token {
     // Keywords
     FUNCTION,
     LET,
+
+    MINUS,
+    BANG,
+    ASTERISK,
+    SLASH,
+    LT,
+    GT,
+
+    IF,
+    RETURN,
+    TRUE,
+    FALSE,
+    ELSE,
+    EQUAL,
+    NOTEQUAL,
 }
 
 pub struct Lexer {
@@ -42,6 +57,7 @@ impl Lexer {
         l.read_char();
         return l;
     }
+
     fn read_char(&mut self) {
         if self.read_position >= self.input.len() {
             self.ch = 0
@@ -53,11 +69,26 @@ impl Lexer {
         self.read_position += 1;
     }
 
+    fn peek(&mut self) -> u8 {
+        if self.read_position >= self.input.len() {
+            return 0;
+        } else {
+            return self.input[self.read_position];
+        }
+    }
+
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
         let tok = match self.ch {
-            b'=' => Token::ASSIGN,
+            b'=' => {
+                if self.peek() == '=' as u8 {
+                    self.read_char();
+                    Token::EQUAL
+                } else {
+                    Token::ASSIGN
+                }
+            }
             b'+' => Token::PLUS,
             b',' => Token::COMMA,
             b';' => Token::SEMICOLON,
@@ -65,6 +96,20 @@ impl Lexer {
             b')' => Token::RPAREN,
             b'{' => Token::LBRACE,
             b'}' => Token::RBRACE,
+            b'-' => Token::MINUS,
+            b'!' => {
+                if self.peek() == '=' as u8 {
+                    self.read_char();
+                    Token::NOTEQUAL
+                } else {
+                    Token::BANG
+                }
+            }
+
+            b'*' => Token::ASTERISK,
+            b'/' => Token::SLASH,
+            b'<' => Token::LT,
+            b'>' => Token::GT,
             0 => Token::EOF,
             ch => {
                 if is_letter(ch) {
@@ -104,6 +149,11 @@ fn lookup_ident(ident: String) -> Token {
     let token = match ident.as_str() {
         "fn" => Token::FUNCTION,
         "let" => Token::LET,
+        "if" => Token::IF,
+        "true" => Token::TRUE,
+        "false" => Token::FALSE,
+        "else" => Token::ELSE,
+        "return" => Token::RETURN,
         _ => Token::IDENT(ident),
     };
     return token;
@@ -149,6 +199,16 @@ fn test_lexer2() {
             x + y;
         };
         let result = add(five, ten);
+        !-/*5;
+        5 < 10 > 5;
+        if (5 < 10) {
+            return true;
+        } else {
+            return false;
+        }
+
+        10 == 10;
+        10 != 9;
         "#;
 
     let tokens = vec![
@@ -188,6 +248,44 @@ fn test_lexer2() {
         Token::IDENT(String::from("ten")),
         Token::RPAREN,
         Token::SEMICOLON,
+        Token::BANG,
+        Token::MINUS,
+        Token::SLASH,
+        Token::ASTERISK,
+        Token::INT(String::from("5")),
+        Token::SEMICOLON,
+        Token::INT(String::from("5")),
+        Token::LT,
+        Token::INT(String::from("10")),
+        Token::GT,
+        Token::INT(String::from("5")),
+        Token::SEMICOLON,
+        Token::IF,
+        Token::LPAREN,
+        Token::INT(String::from("5")),
+        Token::LT,
+        Token::INT(String::from("10")),
+        Token::RPAREN,
+        Token::LBRACE,
+        Token::RETURN,
+        Token::TRUE,
+        Token::SEMICOLON,
+        Token::RBRACE,
+        Token::ELSE,
+        Token::LBRACE,
+        Token::RETURN,
+        Token::FALSE,
+        Token::SEMICOLON,
+        Token::RBRACE,
+        Token::INT(String::from("10")),
+        Token::EQUAL,
+        Token::INT(String::from("10")),
+        Token::SEMICOLON,
+        Token::INT(String::from("10")),
+        Token::NOTEQUAL,
+        Token::INT(String::from("9")),
+        Token::SEMICOLON,
+        Token::EOF,
     ];
     let mut l = Lexer::new(input.into());
     for want in tokens.iter() {
