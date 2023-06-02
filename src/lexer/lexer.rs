@@ -54,6 +54,8 @@ impl Lexer {
     }
 
     pub fn next_token(&mut self) -> Token {
+        self.skip_whitespace();
+
         let tok = match self.ch {
             b'=' => Token::ASSIGN,
             b'+' => Token::PLUS,
@@ -64,11 +66,57 @@ impl Lexer {
             b'{' => Token::LBRACE,
             b'}' => Token::RBRACE,
             0 => Token::EOF,
-            _ => Token::ILLEGAL,
+            ch => {
+                if is_letter(ch) {
+                    return lookup_ident(self.read_identifier());
+                } else if is_digit(ch) {
+                    return Token::INT(self.read_number());
+                }
+                Token::ILLEGAL
+            }
         };
         self.read_char();
         return tok;
     }
+    fn read_identifier(&mut self) -> String {
+        let starting_pos = self.position;
+        while is_letter(self.ch) {
+            self.read_char()
+        }
+        return String::from_utf8_lossy(&self.input[starting_pos..self.position]).into_owned();
+    }
+
+    fn read_number(&mut self) -> String {
+        let starting_pos = self.position;
+        while is_digit(self.ch) {
+            self.read_char()
+        }
+        return String::from_utf8_lossy(&self.input[starting_pos..self.position]).into_owned();
+    }
+    fn skip_whitespace(&mut self) {
+        while self.ch.is_ascii_whitespace() {
+            self.read_char()
+        }
+    }
+}
+
+fn lookup_ident(ident: String) -> Token {
+    let token = match ident.as_str() {
+        "fn" => Token::FUNCTION,
+        "let" => Token::LET,
+        _ => Token::IDENT(ident),
+    };
+    return token;
+}
+
+fn is_letter(ch: u8) -> bool {
+    return 'a' as u8 <= ch && ch <= 'z' as u8
+        || 'A' as u8 <= ch && ch <= 'Z' as u8
+        || ch == '_' as u8;
+}
+
+fn is_digit(ch: u8) -> bool {
+    return '0' as u8 <= ch && ch <= '9' as u8;
 }
 
 #[test]
@@ -89,5 +137,61 @@ fn test_lexer() {
     for want in tests {
         let got = l.next_token();
         assert_eq!(got, want);
+    }
+}
+
+#[test]
+fn test_lexer2() {
+    let input = r#"
+        let five = 5;
+        let ten = 10;
+        let add = fn(x, y) {
+            x + y;
+        };
+        let result = add(five, ten);
+        "#;
+
+    let tokens = vec![
+        Token::LET,
+        Token::IDENT(String::from("five")),
+        Token::ASSIGN,
+        Token::INT(String::from("5")),
+        Token::SEMICOLON,
+        Token::LET,
+        Token::IDENT(String::from("ten")),
+        Token::ASSIGN,
+        Token::INT(String::from("10")),
+        Token::SEMICOLON,
+        Token::LET,
+        Token::IDENT(String::from("add")),
+        Token::ASSIGN,
+        Token::FUNCTION,
+        Token::LPAREN,
+        Token::IDENT(String::from("x")),
+        Token::COMMA,
+        Token::IDENT(String::from("y")),
+        Token::RPAREN,
+        Token::LBRACE,
+        Token::IDENT(String::from("x")),
+        Token::PLUS,
+        Token::IDENT(String::from("y")),
+        Token::SEMICOLON,
+        Token::RBRACE,
+        Token::SEMICOLON,
+        Token::LET,
+        Token::IDENT(String::from("result")),
+        Token::ASSIGN,
+        Token::IDENT(String::from("add")),
+        Token::LPAREN,
+        Token::IDENT(String::from("five")),
+        Token::COMMA,
+        Token::IDENT(String::from("ten")),
+        Token::RPAREN,
+        Token::SEMICOLON,
+    ];
+    let mut l = Lexer::new(input.into());
+    for want in tokens.iter() {
+        let got = l.next_token();
+        assert_eq!(got, *want);
     }
 }
