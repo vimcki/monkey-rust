@@ -1,8 +1,11 @@
 mod lexer;
+mod repl;
 
-use crate::lexer::lexer::Lexer;
+use std::io;
 
-fn main() {
-    let mut l = Lexer::new(vec![0]);
-    l.next_token();
+use repl::start;
+
+fn main() -> Result<(), io::Error> {
+    let res = start();
+    res
 }
