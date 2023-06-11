@@ -4,6 +4,7 @@ use crate::lexer::lexer::Token;
 
 pub trait Node: fmt::Debug {
     fn token(&self) -> Token;
+    fn text(&self) -> String;
 }
 
 pub trait Statement: Node {
@@ -28,6 +29,13 @@ impl Node for Program {
             Token::EOF
         }
     }
+    fn text(&self) -> String {
+        let mut s = String::new();
+        for stmt in &self.statements {
+            s.push_str(&stmt.text());
+        }
+        return s;
+    }
 }
 
 #[derive(Debug)]
@@ -39,6 +47,9 @@ pub struct LetStatement {
 impl Node for LetStatement {
     fn token(&self) -> Token {
         Token::LET
+    }
+    fn text(&self) -> String {
+        format!("let {} = {};", self.name.text(), self.value.text())
     }
 }
 
@@ -58,6 +69,9 @@ impl Node for ReturnStatement {
     fn token(&self) -> Token {
         Token::RETURN
     }
+    fn text(&self) -> String {
+        format!("return {};", self.value.text())
+    }
 }
 
 impl Statement for ReturnStatement {
@@ -76,8 +90,39 @@ impl Node for Identifier {
     fn token(&self) -> Token {
         self.token.clone()
     }
+    fn text(&self) -> String {
+        self.token.text()
+    }
 }
 
 impl Expression for Identifier {
     fn expression_node(&self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::{Identifier, LetStatement, Node},
+        lexer::lexer::Token,
+    };
+
+    use super::Program;
+
+    #[test]
+    fn test_text() {
+        let empty_program = Program { statements: vec![] };
+        assert_eq!(empty_program.text(), "");
+
+        let program = Program {
+            statements: vec![Box::new(LetStatement {
+                name: Identifier {
+                    token: Token::IDENT("myVar".to_string()),
+                },
+                value: Box::new(Identifier {
+                    token: Token::IDENT("anotherVar".to_string()),
+                }),
+            })],
+        };
+        assert_eq!(program.text(), "let myVar = anotherVar;");
+    }
 }

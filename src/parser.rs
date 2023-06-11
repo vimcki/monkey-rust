@@ -105,6 +105,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::Program;
     use crate::parser::Parser;
     use crate::parser::Token;
     use crate::{
@@ -155,5 +156,10 @@ mod tests {
             eprintln!("aaaaa {:?}", stmt);
             assert_eq!(stmt.token(), Token::RETURN);
         }
+    }
+
+    #[test]
+    fn test_text() {
+        let program = Program { statements: vec![] };
     }
 }

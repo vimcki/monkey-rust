@@ -2,34 +2,24 @@
 pub enum Token {
     ILLEGAL,
     EOF,
-
-    // Identifiers + literals
     IDENT(String),
     INT(String),
-
-    // 1343456
-    // Operators
     ASSIGN,
     PLUS,
-    // Delimiters
     COMMA,
-
     SEMICOLON,
     LPAREN,
     RPAREN,
     LBRACE,
     RBRACE,
-    // Keywords
     FUNCTION,
     LET,
-
     MINUS,
     BANG,
     ASTERISK,
     SLASH,
     LT,
     GT,
-
     IF,
     RETURN,
     TRUE,
@@ -37,6 +27,40 @@ pub enum Token {
     ELSE,
     EQUAL,
     NOTEQUAL,
+}
+
+impl Token {
+    pub fn text(&self) -> String {
+        return match self {
+            Token::ILLEGAL => "ILLEGAL".to_string(),
+            Token::EOF => "EOF".to_string(),
+            Token::IDENT(s) => s.to_string(),
+            Token::INT(s) => s.to_string(),
+            Token::ASSIGN => "=".to_string(),
+            Token::PLUS => "+".to_string(),
+            Token::COMMA => ",".to_string(),
+            Token::SEMICOLON => ";".to_string(),
+            Token::LPAREN => "(".to_string(),
+            Token::RPAREN => ")".to_string(),
+            Token::LBRACE => "{".to_string(),
+            Token::RBRACE => "}".to_string(),
+            Token::FUNCTION => "fn".to_string(),
+            Token::LET => "let".to_string(),
+            Token::MINUS => "-".to_string(),
+            Token::BANG => "!".to_string(),
+            Token::ASTERISK => "*".to_string(),
+            Token::SLASH => "/".to_string(),
+            Token::LT => "<".to_string(),
+            Token::GT => ">".to_string(),
+            Token::IF => "if".to_string(),
+            Token::RETURN => "return".to_string(),
+            Token::TRUE => "true".to_string(),
+            Token::FALSE => "false".to_string(),
+            Token::ELSE => "else".to_string(),
+            Token::EQUAL => "==".to_string(),
+            Token::NOTEQUAL => "!=".to_string(),
+        };
+    }
 }
 
 pub struct Lexer {
