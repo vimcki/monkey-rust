@@ -1,7 +1,7 @@
 use std::string;
 
 use crate::{
-    ast::{Identifier, LetStatement, Program, Statement},
+    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
     lexer::lexer::{Lexer, Token},
 };
 
@@ -41,6 +41,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Result<Box<dyn Statement>, String> {
         match self.cur_token {
             Token::LET => self.parse_let_statement(),
+            Token::RETURN => self.parse_return_statement(),
             _ => Ok(unimplemented!()),
         }
     }
@@ -66,15 +67,29 @@ impl Parser {
         }));
     }
 
+    fn parse_return_statement(&mut self) -> Result<Box<dyn Statement>, String> {
+        self.next_token();
+        while !self.cur_token_is(Token::SEMICOLON) {
+            self.next_token();
+        }
+        return Ok(Box::new(ReturnStatement {
+            value: Box::new(Identifier {
+                token: Token::IDENT("".to_string()),
+            }),
+        }));
+    }
+
     fn cur_token_is(&self, t: Token) -> bool {
         self.cur_token == t
     }
 
     fn peek_token_is(&self, t: Token) -> bool {
         let my = format!("{:?}", self.peek_token);
-        let other = format!("{:?}", t);
         let my = my.split("(").next().unwrap().to_string();
+
+        let other = format!("{:?}", t);
         let other = other.split("(").next().unwrap().to_string();
+
         my == other
     }
 
@@ -121,5 +136,24 @@ mod tests {
         assert_eq!(s.token(), Token::LET);
         let let_stmt = s.as_any().downcast_ref::<LetStatement>().unwrap();
         assert_eq!(let_stmt.name.token, Token::IDENT(name.to_string()));
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let input = r#"
+        return 5;
+        return 10;
+        return 993322;
+        "#;
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert_eq!(program.is_ok(), true);
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 3);
+        for stmt in program.statements {
+            eprintln!("aaaaa {:?}", stmt);
+            assert_eq!(stmt.token(), Token::RETURN);
+        }
     }
 }

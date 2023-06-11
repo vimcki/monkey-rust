@@ -1,8 +1,8 @@
-use std::any::Any;
+use std::{any::Any, fmt};
 
 use crate::lexer::lexer::Token;
 
-pub trait Node {
+pub trait Node: fmt::Debug {
     fn token(&self) -> Token;
 }
 
@@ -15,6 +15,7 @@ pub trait Expression: Node {
     fn expression_node(&self);
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Box<dyn Statement>>,
 }
@@ -29,6 +30,7 @@ impl Node for Program {
     }
 }
 
+#[derive(Debug)]
 pub struct LetStatement {
     pub name: Identifier,
     pub value: Box<dyn Expression>,
@@ -47,6 +49,25 @@ impl Statement for LetStatement {
     }
 }
 
+#[derive(Debug)]
+pub struct ReturnStatement {
+    pub value: Box<dyn Expression>,
+}
+
+impl Node for ReturnStatement {
+    fn token(&self) -> Token {
+        Token::RETURN
+    }
+}
+
+impl Statement for ReturnStatement {
+    fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Debug)]
 pub struct Identifier {
     pub token: Token,
 }
