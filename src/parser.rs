@@ -1,9 +1,25 @@
-use std::string;
+use std::collections::HashMap;
 
 use crate::{
-    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
+    ast::{
+        Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement,
+        Statement,
+    },
     lexer::lexer::{Lexer, Token},
 };
+
+enum Precedence {
+    LOWEST,
+    EQUALS,
+    LESSGREATER,
+    SUM,
+    PRODUCT,
+    PREFIX,
+    CALL,
+}
+
+type prefix_parse_fn = fn(&mut Parser) -> Result<Box<dyn Expression>, String>;
+type infix_parse_fn = fn(&mut Parser, Box<dyn Statement>) -> Result<Box<dyn Expression>, String>;
 
 pub struct Parser {
     l: Lexer,
@@ -20,7 +36,15 @@ impl Parser {
         };
         p.next_token();
         p.next_token();
+
         return p;
+    }
+
+    fn get_prefix_fn(&self, t: Token) -> Result<prefix_parse_fn, String> {
+        return match t {
+            Token::IDENT(_) => Ok(Parser::parse_identifier),
+            _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
+        };
     }
 
     fn next_token(&mut self) {
@@ -42,7 +66,7 @@ impl Parser {
         match self.cur_token {
             Token::LET => self.parse_let_statement(),
             Token::RETURN => self.parse_return_statement(),
-            _ => Ok(unimplemented!()),
+            _ => self.parse_expression_statement(),
         }
     }
 
@@ -79,6 +103,24 @@ impl Parser {
         }));
     }
 
+    fn parse_expression_statement(&mut self) -> Result<Box<dyn Statement>, String> {
+        let expr = self.parse_expression(Precedence::LOWEST)?;
+
+        if self.peek_token_is(Token::SEMICOLON) {
+            self.next_token();
+        }
+        let stmt = ExpressionStatement {
+            token: self.cur_token.clone(),
+            expression: expr,
+        };
+        return Ok(Box::new(stmt));
+    }
+
+    fn parse_expression(&mut self, precedence: Precedence) -> Result<Box<dyn Expression>, String> {
+        let func = self.get_prefix_fn(self.cur_token.clone())?;
+        let left_exp = func(self)?;
+        return Ok(left_exp);
+    }
     fn cur_token_is(&self, t: Token) -> bool {
         self.cur_token == t
     }
@@ -101,11 +143,18 @@ impl Parser {
             return false;
         }
     }
+
+    fn parse_identifier(&mut self) -> Result<Box<dyn Expression>, String> {
+        Ok(Box::new(Identifier {
+            token: self.cur_token.clone(),
+        }))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Program;
+    use crate::ast::ExpressionStatement;
+    use crate::ast::Identifier;
     use crate::parser::Parser;
     use crate::parser::Token;
     use crate::{
@@ -153,13 +202,37 @@ mod tests {
         let program = program.unwrap();
         assert_eq!(program.statements.len(), 3);
         for stmt in program.statements {
-            eprintln!("aaaaa {:?}", stmt);
             assert_eq!(stmt.token(), Token::RETURN);
         }
     }
 
     #[test]
-    fn test_text() {
-        let program = Program { statements: vec![] };
+    fn test_identifier_expression() {
+        let input = "foobar;";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let ident = exp
+            .expression
+            .as_ref()
+            .as_any()
+            .downcast_ref::<Identifier>()
+            .unwrap();
+
+        let literal = match ident.token {
+            Token::IDENT(ref s) => s,
+            _ => panic!("not ident"),
+        };
+
+        assert_eq!(literal, "foobar");
     }
 }

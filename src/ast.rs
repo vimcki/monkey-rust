@@ -5,11 +5,11 @@ use crate::lexer::lexer::Token;
 pub trait Node: fmt::Debug {
     fn token(&self) -> Token;
     fn text(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub trait Statement: Node {
     fn statement_node(&self);
-    fn as_any(&self) -> &dyn Any;
 }
 
 pub trait Expression: Node {
@@ -36,6 +36,9 @@ impl Node for Program {
         }
         return s;
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -51,13 +54,13 @@ impl Node for LetStatement {
     fn text(&self) -> String {
         format!("let {} = {};", self.name.text(), self.value.text())
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Statement for LetStatement {
     fn statement_node(&self) {}
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 #[derive(Debug)]
@@ -72,13 +75,35 @@ impl Node for ReturnStatement {
     fn text(&self) -> String {
         format!("return {};", self.value.text())
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Statement for ReturnStatement {
     fn statement_node(&self) {}
+}
+
+#[derive(Debug)]
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Box<dyn Expression>,
+}
+
+impl Node for ExpressionStatement {
+    fn token(&self) -> Token {
+        self.token.clone()
+    }
+    fn text(&self) -> String {
+        self.expression.text()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+impl Statement for ExpressionStatement {
+    fn statement_node(&self) {}
 }
 
 #[derive(Debug)]
@@ -92,6 +117,9 @@ impl Node for Identifier {
     }
     fn text(&self) -> String {
         self.token.text()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
