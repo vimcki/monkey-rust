@@ -767,4 +767,35 @@ mod tests {
             &"y",
         );
     }
+
+    #[test]
+    fn test_fuction_parameter_parsing() {
+        let tests = vec![
+            ("fn() {};", vec![]),
+            ("fn(x) {};", vec!["x"]),
+            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+        for tt in tests {
+            let l = Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert!(
+                program.is_ok(),
+                "Expected parsing to succeed. Error: {:?}",
+                program.err()
+            );
+            let program = program.unwrap();
+            let stmt = &program.statements[0];
+            let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let func = exp
+                .expression
+                .as_any()
+                .downcast_ref::<FunctionLiteral>()
+                .unwrap();
+            assert_eq!(func.parameters.len(), tt.1.len());
+            for (i, ident) in tt.1.iter().enumerate() {
+                test_literal_expression(&func.parameters[i], ident);
+            }
+        }
+    }
 }
