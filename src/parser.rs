@@ -239,6 +239,7 @@ mod tests {
     use crate::ast::Identifier;
     use crate::ast::InfixExpression;
     use crate::ast::IntegerLiteral;
+    use crate::ast::Node;
     use crate::ast::PrefixExpression;
     use crate::parser::Parser;
     use crate::parser::Token;
@@ -418,6 +419,41 @@ mod tests {
             test_integer_literal(&literal.left, tt.1);
             assert_eq!(literal.token.text(), tt.2);
             test_integer_literal(&literal.right, tt.3);
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_parsing() {
+        let tests = vec![
+            ("-a * b", "((-a) * b)"),
+            ("!-a", "(!(-a))"),
+            ("a + b + c", "((a + b) + c)"),
+            ("a + b - c", "((a + b) - c)"),
+            ("a * b * c", "((a * b) * c)"),
+            ("a * b / c", "((a * b) / c)"),
+            ("a + b / c", "(a + (b / c))"),
+            ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"),
+            ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
+            ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
+            ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
+        ];
+
+        for tt in tests {
+            let l = Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert!(
+                program.is_ok(),
+                "Expected parsing to succeed. Error: {:?}",
+                program.err()
+            );
+            let program = program.unwrap();
+            let actual = program.text();
+            assert_eq!(actual, tt.1);
         }
     }
 }
