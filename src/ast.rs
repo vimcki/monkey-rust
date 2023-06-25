@@ -199,6 +199,27 @@ impl Expression for InfixExpression {
     fn expression_node(&self) {}
 }
 
+#[derive(Debug)]
+pub struct BooleanExpression {
+    pub token: Token,
+}
+
+impl Node for BooleanExpression {
+    fn token(&self) -> Token {
+        self.token.clone()
+    }
+    fn text(&self) -> String {
+        self.token.text()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Expression for BooleanExpression {
+    fn expression_node(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

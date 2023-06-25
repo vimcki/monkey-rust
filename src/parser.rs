@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement,
-        PrefixExpression, Program, ReturnStatement, Statement,
+        BooleanExpression, Expression, ExpressionStatement, Identifier, InfixExpression,
+        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::lexer::{Lexer, Token},
 };
@@ -58,6 +58,7 @@ impl Parser {
             Token::IDENT(_) => Ok(Parser::parse_identifier),
             Token::INT(_) => Ok(Parser::parse_integer_literal),
             Token::BANG | Token::MINUS => Ok(Parser::parse_prefix_expression),
+            Token::TRUE | Token::FALSE => Ok(Parser::parse_boolean),
             _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
         };
     }
@@ -210,6 +211,12 @@ impl Parser {
         }));
     }
 
+    fn parse_boolean(&mut self) -> Result<Box<dyn Expression>, String> {
+        return Ok(Box::new(BooleanExpression {
+            token: self.cur_token.clone(),
+        }));
+    }
+
     fn parse_prefix_expression(&mut self) -> Result<Box<dyn Expression>, String> {
         let operator = self.cur_token.clone();
         self.next_token();
@@ -236,6 +243,7 @@ impl Parser {
 mod tests {
     use std::any::Any;
 
+    use crate::ast::BooleanExpression;
     use crate::ast::Expression;
     use crate::ast::ExpressionStatement;
     use crate::ast::Identifier;
@@ -471,5 +479,32 @@ mod tests {
         test_literal_expression(&op_exp.left, left);
         assert_eq!(op_exp.token.text(), operator);
         test_literal_expression(&op_exp.right, right);
+    }
+
+    #[test]
+    fn test_boolean_expression() {
+        let tests = vec![("true;", Token::TRUE), ("false;", Token::FALSE)];
+        for tt in tests {
+            let l = Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert!(
+                program.is_ok(),
+                "Expected parsing to succeed. Error: {:?}",
+                program.err()
+            );
+            let program = program.unwrap();
+            assert_eq!(program.statements.len(), 1);
+            let stmt = &program.statements[0];
+            let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let literal = exp
+                .expression
+                .as_ref()
+                .as_any()
+                .downcast_ref::<BooleanExpression>()
+                .unwrap();
+
+            assert_eq!(literal.token, tt.1);
+        }
     }
 }
