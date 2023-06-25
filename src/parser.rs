@@ -59,6 +59,7 @@ impl Parser {
             Token::INT(_) => Ok(Parser::parse_integer_literal),
             Token::BANG | Token::MINUS => Ok(Parser::parse_prefix_expression),
             Token::TRUE | Token::FALSE => Ok(Parser::parse_boolean),
+            Token::LPAREN => Ok(Parser::parse_grouped_expression),
             _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
         };
     }
@@ -215,6 +216,15 @@ impl Parser {
         return Ok(Box::new(BooleanExpression {
             token: self.cur_token.clone(),
         }));
+    }
+
+    fn parse_grouped_expression(&mut self) -> Result<Box<dyn Expression>, String> {
+        self.next_token();
+        let exp = self.parse_expression(Precedence::LOWEST)?;
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_grouped_expression: expect_peek failed".to_string());
+        }
+        return Ok(exp);
     }
 
     fn parse_prefix_expression(&mut self) -> Result<Box<dyn Expression>, String> {
@@ -492,6 +502,11 @@ mod tests {
             ("false", "false"),
             ("3 > 5 == false", "((3 > 5) == false)"),
             ("3 < 5 == true", "((3 < 5) == true)"),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            ("-(5 + 5)", "(-(5 + 5))"),
+            ("!(true == true)", "(!(true == true))"),
         ];
 
         for tt in tests {
