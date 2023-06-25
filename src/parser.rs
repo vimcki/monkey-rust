@@ -440,6 +440,10 @@ mod tests {
                 "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
             ),
+            ("true", "true"),
+            ("false", "false"),
+            ("3 > 5 == false", "((3 > 5) == false)"),
+            ("3 < 5 == true", "((3 < 5) == true)"),
         ];
 
         for tt in tests {
@@ -462,11 +466,18 @@ mod tests {
             test_integer_literal(exp, *expected);
         } else if let Some(expected) = expected.downcast_ref::<i32>() {
             test_integer_literal(exp, *expected as i64);
+        } else if let Some(expected) = expected.downcast_ref::<bool>() {
+            test_boolean_literal(exp, *expected);
         } else if let Some(expected) = expected.downcast_ref::<&str>() {
             test_identifier(exp, expected);
         } else {
             panic!("type of exp not handled. got={}", exp.text());
         }
+    }
+
+    fn test_boolean_literal(exp: &Box<dyn Expression>, value: bool) {
+        let boolean = exp.as_any().downcast_ref::<BooleanExpression>().unwrap();
+        assert_eq!(boolean.token.text(), value.to_string());
     }
 
     fn test_infix_expression(
@@ -483,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_boolean_expression() {
-        let tests = vec![("true;", Token::TRUE), ("false;", Token::FALSE)];
+        let tests = vec![("true;", true), ("false;", false)];
         for tt in tests {
             let l = Lexer::new(tt.0.as_bytes().to_vec());
             let mut p = Parser::new(l);
@@ -497,14 +508,7 @@ mod tests {
             assert_eq!(program.statements.len(), 1);
             let stmt = &program.statements[0];
             let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
-            let literal = exp
-                .expression
-                .as_ref()
-                .as_any()
-                .downcast_ref::<BooleanExpression>()
-                .unwrap();
-
-            assert_eq!(literal.token, tt.1);
+            test_boolean_literal(&exp.expression, tt.1);
         }
     }
 }
