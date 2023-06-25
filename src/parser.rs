@@ -384,6 +384,33 @@ mod tests {
 
             test_integer_literal(&literal.right, tt.2);
         }
+
+        let bool_tests = vec![("!true", "!", true), ("!false", "!", false)];
+
+        for tt in bool_tests {
+            let l = Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert!(
+                program.is_ok(),
+                "Expected parsing to succeed. Error: {:?}",
+                program.err()
+            );
+            let program = program.unwrap();
+            assert_eq!(program.statements.len(), 1);
+            let stmt = &program.statements[0];
+            let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let literal = exp
+                .expression
+                .as_ref()
+                .as_any()
+                .downcast_ref::<PrefixExpression>()
+                .unwrap();
+
+            assert_eq!(literal.token.text(), tt.1);
+
+            test_boolean_literal(&literal.right, tt.2);
+        }
     }
 
     fn test_integer_literal(exp: &Box<dyn Expression>, value: i64) {
