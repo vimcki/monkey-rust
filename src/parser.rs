@@ -420,6 +420,27 @@ mod tests {
             let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
             test_infix_expression(&exp.expression, &tt.1, tt.2, &tt.3);
         }
+
+        let bool_tests = vec![
+            ("true == true", true, "==", true),
+            ("true != false", true, "!=", false),
+        ];
+
+        for tt in bool_tests {
+            let l = Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert!(
+                program.is_ok(),
+                "Expected parsing to succeed. Error: {:?}",
+                program.err()
+            );
+            let program = program.unwrap();
+            assert_eq!(program.statements.len(), 1);
+            let stmt = &program.statements[0];
+            let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            test_infix_expression(&exp.expression, &tt.1, tt.2, &tt.3);
+        }
     }
 
     #[test]
