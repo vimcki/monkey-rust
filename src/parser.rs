@@ -234,6 +234,8 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+
     use crate::ast::Expression;
     use crate::ast::ExpressionStatement;
     use crate::ast::Identifier;
@@ -307,19 +309,18 @@ mod tests {
         assert_eq!(program.statements.len(), 1);
         let stmt = &program.statements[0];
         let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
-        let ident = exp
-            .expression
-            .as_ref()
-            .as_any()
-            .downcast_ref::<Identifier>()
-            .unwrap();
+        test_identifier(&exp.expression, "foobar");
+    }
+
+    fn test_identifier(exp: &Box<dyn Expression>, value: &str) {
+        let ident = exp.as_ref().as_any().downcast_ref::<Identifier>().unwrap();
 
         let literal = match ident.token {
             Token::IDENT(ref s) => s,
             _ => panic!("not ident"),
         };
 
-        assert_eq!(literal, "foobar");
+        assert_eq!(literal, value);
     }
 
     #[test]
@@ -409,16 +410,7 @@ mod tests {
             assert_eq!(program.statements.len(), 1);
             let stmt = &program.statements[0];
             let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
-            let literal = exp
-                .expression
-                .as_ref()
-                .as_any()
-                .downcast_ref::<InfixExpression>()
-                .unwrap();
-
-            test_integer_literal(&literal.left, tt.1);
-            assert_eq!(literal.token.text(), tt.2);
-            test_integer_literal(&literal.right, tt.3);
+            test_infix_expression(&exp.expression, &tt.1, tt.2, &tt.3);
         }
     }
 
@@ -455,5 +447,29 @@ mod tests {
             let actual = program.text();
             assert_eq!(actual, tt.1);
         }
+    }
+
+    fn test_literal_expression(exp: &Box<dyn Expression>, expected: &dyn Any) {
+        if let Some(expected) = expected.downcast_ref::<i64>() {
+            test_integer_literal(exp, *expected);
+        } else if let Some(expected) = expected.downcast_ref::<i32>() {
+            test_integer_literal(exp, *expected as i64);
+        } else if let Some(expected) = expected.downcast_ref::<&str>() {
+            test_identifier(exp, expected);
+        } else {
+            panic!("type of exp not handled. got={}", exp.text());
+        }
+    }
+
+    fn test_infix_expression(
+        exp: &Box<dyn Expression>,
+        left: &dyn Any,
+        operator: &str,
+        right: &dyn Any,
+    ) {
+        let op_exp = exp.as_any().downcast_ref::<InfixExpression>().unwrap();
+        test_literal_expression(&op_exp.left, left);
+        assert_eq!(op_exp.token.text(), operator);
+        test_literal_expression(&op_exp.right, right);
     }
 }
