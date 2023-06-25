@@ -127,6 +127,28 @@ impl Expression for Identifier {
     fn expression_node(&self) {}
 }
 
+#[derive(Debug)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl Node for IntegerLiteral {
+    fn token(&self) -> Token {
+        self.token.clone()
+    }
+    fn text(&self) -> String {
+        self.token.text()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Expression for IntegerLiteral {
+    fn expression_node(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

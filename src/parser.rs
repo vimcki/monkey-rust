@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement,
-        Statement,
+        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
+        ReturnStatement, Statement,
     },
     lexer::lexer::{Lexer, Token},
 };
@@ -43,6 +41,7 @@ impl Parser {
     fn get_prefix_fn(&self, t: Token) -> Result<prefix_parse_fn, String> {
         return match t {
             Token::IDENT(_) => Ok(Parser::parse_identifier),
+            Token::INT(_) => Ok(Parser::parse_integer_literal),
             _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
         };
     }
@@ -149,12 +148,24 @@ impl Parser {
             token: self.cur_token.clone(),
         }))
     }
+
+    fn parse_integer_literal(&mut self) -> Result<Box<dyn Expression>, String> {
+        let value = match self.cur_token.clone() {
+            Token::INT(s) => s.parse::<i64>().unwrap(),
+            _ => return Err("parse_integer_literal: not an integer".to_string()),
+        };
+        return Ok(Box::new(IntegerLiteral {
+            token: self.cur_token.clone(),
+            value,
+        }));
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ast::ExpressionStatement;
     use crate::ast::Identifier;
+    use crate::ast::IntegerLiteral;
     use crate::parser::Parser;
     use crate::parser::Token;
     use crate::{
@@ -234,5 +245,31 @@ mod tests {
         };
 
         assert_eq!(literal, "foobar");
+    }
+
+    #[test]
+    fn test_integer_literal() {
+        let input = "5;";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let literal = exp
+            .expression
+            .as_ref()
+            .as_any()
+            .downcast_ref::<IntegerLiteral>()
+            .unwrap();
+
+        assert_eq!(literal.value, 5);
+        assert_eq!(literal.token, Token::INT("5".to_string()));
     }
 }
