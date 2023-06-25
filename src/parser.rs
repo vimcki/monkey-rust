@@ -19,8 +19,8 @@ enum Precedence {
     CALL,
 }
 
-type prefix_parse_fn = fn(&mut Parser) -> Result<Box<dyn Expression>, String>;
-type infix_parse_fn = fn(&mut Parser, Box<dyn Expression>) -> Result<Box<dyn Expression>, String>;
+type FrefixParserFn = fn(&mut Parser) -> Result<Box<dyn Expression>, String>;
+type InfixParserFn = fn(&mut Parser, Box<dyn Expression>) -> Result<Box<dyn Expression>, String>;
 
 pub struct Parser {
     l: Lexer,
@@ -53,7 +53,7 @@ impl Parser {
         return p;
     }
 
-    fn get_prefix_fn(&self, t: Token) -> Result<prefix_parse_fn, String> {
+    fn get_prefix_fn(&self, t: Token) -> Result<FrefixParserFn, String> {
         return match t {
             Token::IDENT(_) => Ok(Parser::parse_identifier),
             Token::INT(_) => Ok(Parser::parse_integer_literal),
@@ -62,7 +62,7 @@ impl Parser {
         };
     }
 
-    fn get_infix_fn(&self, t: Token) -> Result<infix_parse_fn, String> {
+    fn get_infix_fn(&self, t: Token) -> Result<InfixParserFn, String> {
         return match t {
             Token::PLUS
             | Token::MINUS
