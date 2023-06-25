@@ -106,7 +106,7 @@ impl Statement for ExpressionStatement {
     fn statement_node(&self) {}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
 }
@@ -146,6 +146,38 @@ impl Node for IntegerLiteral {
 }
 
 impl Expression for IntegerLiteral {
+    fn expression_node(&self) {}
+}
+
+#[derive(Debug)]
+pub struct FunctionLiteral {
+    pub parameters: Vec<Box<dyn Expression>>,
+    pub body: BlockStatement,
+}
+
+impl Node for FunctionLiteral {
+    fn token(&self) -> Token {
+        Token::FUNCTION
+    }
+    fn text(&self) -> String {
+        let mut s = String::new();
+        s.push_str("fn(");
+        for (i, param) in self.parameters.iter().enumerate() {
+            s.push_str(&param.text());
+            if i < self.parameters.len() - 1 {
+                s.push_str(", ");
+            }
+        }
+        s.push_str(") ");
+        s.push_str(&self.body.text());
+        return s;
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Expression for FunctionLiteral {
     fn expression_node(&self) {}
 }
 

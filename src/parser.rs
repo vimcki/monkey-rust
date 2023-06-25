@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
-        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
-        ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
+        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
+        Program, ReturnStatement, Statement,
     },
     lexer::lexer::{Lexer, Token},
 };
@@ -62,6 +62,7 @@ impl Parser {
             Token::TRUE | Token::FALSE => Ok(Parser::parse_boolean),
             Token::LPAREN => Ok(Parser::parse_grouped_expression),
             Token::IF => Ok(Parser::parse_if_expression),
+            Token::FUNCTION => Ok(Parser::parse_function_literal),
             _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
         };
     }
@@ -257,6 +258,39 @@ impl Parser {
         }));
     }
 
+    fn parse_function_literal(&mut self) -> Result<Box<dyn Expression>, String> {
+        if !self.expect_peek(Token::LPAREN) {
+            return Err("parse_function_literal: expect_peek failed".to_string());
+        }
+        let parameters = self.parse_function_parameters()?;
+        if !self.expect_peek(Token::LBRACE) {
+            return Err("parse_function_literal: expect_peek failed".to_string());
+        }
+        let body = self.parse_block_statement()?;
+        return Ok(Box::new(FunctionLiteral { parameters, body }));
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<Box<dyn Expression>>, String> {
+        let mut identifiers = vec![];
+        if self.peek_token_is(Token::RPAREN) {
+            self.next_token();
+            return Ok(identifiers);
+        }
+        self.next_token();
+        let ident = self.parse_identifier()?;
+        identifiers.push(ident);
+        while self.peek_token_is(Token::COMMA) {
+            self.next_token();
+            self.next_token();
+            let ident = self.parse_identifier()?;
+            identifiers.push(ident);
+        }
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_function_parameters: expect_peek failed".to_string());
+        }
+        return Ok(identifiers);
+    }
+
     fn parse_block_statement(&mut self) -> Result<BlockStatement, String> {
         self.next_token();
         let mut statements = vec![];
@@ -297,6 +331,7 @@ mod tests {
     use crate::ast::BooleanExpression;
     use crate::ast::Expression;
     use crate::ast::ExpressionStatement;
+    use crate::ast::FunctionLiteral;
     use crate::ast::Identifier;
     use crate::ast::IfExpression;
     use crate::ast::InfixExpression;
@@ -692,6 +727,43 @@ mod tests {
                 .downcast_ref::<ExpressionStatement>()
                 .unwrap()
                 .expression,
+            &"y",
+        );
+    }
+
+    #[test]
+    fn test_function_literal() {
+        let input = "fn(x, y) { x + y; }";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let func = exp
+            .expression
+            .as_any()
+            .downcast_ref::<FunctionLiteral>()
+            .unwrap();
+        assert_eq!(func.parameters.len(), 2);
+        test_literal_expression(&func.parameters[0], &"x");
+        test_literal_expression(&func.parameters[1], &"y");
+        assert_eq!(func.body.statements.len(), 1);
+        let body_stmt = &func.body.statements[0];
+        test_infix_expression(
+            &body_stmt
+                .as_any()
+                .downcast_ref::<ExpressionStatement>()
+                .unwrap()
+                .expression,
+            &"x",
+            "+",
             &"y",
         );
     }
