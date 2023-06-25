@@ -220,6 +220,58 @@ impl Expression for BooleanExpression {
     fn expression_node(&self) {}
 }
 
+#[derive(Debug)]
+pub struct BlockStatement {
+    pub statements: Vec<Box<dyn Statement>>,
+}
+
+impl Node for BlockStatement {
+    fn token(&self) -> Token {
+        return Token::LBRACE;
+    }
+    fn text(&self) -> String {
+        let mut s = String::new();
+        for stmt in &self.statements {
+            s.push_str(&stmt.text());
+        }
+        return s;
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Statement for BlockStatement {
+    fn statement_node(&self) {}
+}
+
+#[derive(Debug)]
+pub struct IfExpression {
+    pub condition: Box<dyn Expression>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
+}
+
+impl Node for IfExpression {
+    fn token(&self) -> Token {
+        return Token::IF;
+    }
+    fn text(&self) -> String {
+        let mut s = format!("if {} {}", self.condition.text(), self.consequence.text());
+        if let Some(alt) = &self.alternative {
+            s.push_str(&format!("else {}", alt.text()));
+        }
+        return s;
+    }
+    fn as_any(&self) -> &dyn Any {
+        return self;
+    }
+}
+
+impl Expression for IfExpression {
+    fn expression_node(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

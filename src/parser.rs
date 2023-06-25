@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BooleanExpression, Expression, ExpressionStatement, Identifier, InfixExpression,
-        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
+        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+        ReturnStatement, Statement,
     },
     lexer::lexer::{Lexer, Token},
 };
@@ -60,6 +61,7 @@ impl Parser {
             Token::BANG | Token::MINUS => Ok(Parser::parse_prefix_expression),
             Token::TRUE | Token::FALSE => Ok(Parser::parse_boolean),
             Token::LPAREN => Ok(Parser::parse_grouped_expression),
+            Token::IF => Ok(Parser::parse_if_expression),
             _ => Err("get_prefix_fn: no prefix parse function for token".to_string()),
         };
     }
@@ -227,6 +229,45 @@ impl Parser {
         return Ok(exp);
     }
 
+    fn parse_if_expression(&mut self) -> Result<Box<dyn Expression>, String> {
+        if !self.expect_peek(Token::LPAREN) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        self.next_token();
+        let condition = self.parse_expression(Precedence::LOWEST)?;
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        if !self.expect_peek(Token::LBRACE) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        let consequence = self.parse_block_statement()?;
+        let mut alternative = None;
+        if self.peek_token_is(Token::ELSE) {
+            self.next_token();
+            if !self.expect_peek(Token::LBRACE) {
+                return Err("parse_if_expression: expect_peek failed".to_string());
+            }
+            alternative = Some(self.parse_block_statement()?);
+        }
+        return Ok(Box::new(IfExpression {
+            condition,
+            consequence,
+            alternative,
+        }));
+    }
+
+    fn parse_block_statement(&mut self) -> Result<BlockStatement, String> {
+        self.next_token();
+        let mut statements = vec![];
+        while !self.cur_token_is(Token::RBRACE) && !self.cur_token_is(Token::EOF) {
+            let stmt = self.parse_statement()?;
+            statements.push(stmt);
+            self.next_token();
+        }
+        return Ok(BlockStatement { statements });
+    }
+
     fn parse_prefix_expression(&mut self) -> Result<Box<dyn Expression>, String> {
         let operator = self.cur_token.clone();
         self.next_token();
@@ -257,6 +298,7 @@ mod tests {
     use crate::ast::Expression;
     use crate::ast::ExpressionStatement;
     use crate::ast::Identifier;
+    use crate::ast::IfExpression;
     use crate::ast::InfixExpression;
     use crate::ast::IntegerLiteral;
     use crate::ast::Node;
@@ -573,5 +615,84 @@ mod tests {
             let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
             test_boolean_literal(&exp.expression, tt.1);
         }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let if_exp = exp
+            .expression
+            .as_any()
+            .downcast_ref::<IfExpression>()
+            .unwrap();
+        test_infix_expression(&if_exp.condition, &"x", "<", &"y");
+        assert_eq!(if_exp.consequence.statements.len(), 1);
+        let consequence = &if_exp.consequence.statements[0];
+        test_identifier(
+            &consequence
+                .as_any()
+                .downcast_ref::<ExpressionStatement>()
+                .unwrap()
+                .expression,
+            &"x",
+        );
+        assert!(if_exp.alternative.is_none());
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let if_exp = exp
+            .expression
+            .as_any()
+            .downcast_ref::<IfExpression>()
+            .unwrap();
+        test_infix_expression(&if_exp.condition, &"x", "<", &"y");
+        assert_eq!(if_exp.consequence.statements.len(), 1);
+        let consequence = &if_exp.consequence.statements[0];
+        test_identifier(
+            &consequence
+                .as_any()
+                .downcast_ref::<ExpressionStatement>()
+                .unwrap()
+                .expression,
+            &"x",
+        );
+        assert!(if_exp.alternative.is_some());
+        let alternative = if_exp.alternative.as_ref().unwrap();
+        assert_eq!(alternative.statements.len(), 1);
+        let alternative = &alternative.statements[0];
+        test_identifier(
+            &alternative
+                .as_any()
+                .downcast_ref::<ExpressionStatement>()
+                .unwrap()
+                .expression,
+            &"y",
+        );
     }
 }
