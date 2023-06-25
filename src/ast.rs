@@ -149,6 +149,56 @@ impl Expression for IntegerLiteral {
     fn expression_node(&self) {}
 }
 
+#[derive(Debug)]
+pub struct PrefixExpression {
+    pub token: Token,
+    pub right: Box<dyn Expression>,
+}
+
+impl Node for PrefixExpression {
+    fn token(&self) -> Token {
+        self.token.clone()
+    }
+    fn text(&self) -> String {
+        format!("({}{})", self.token.text(), self.right.text())
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Expression for PrefixExpression {
+    fn expression_node(&self) {}
+}
+
+#[derive(Debug)]
+pub struct InfixExpression {
+    pub token: Token,
+    pub left: Box<dyn Expression>,
+    pub right: Box<dyn Expression>,
+}
+
+impl Node for InfixExpression {
+    fn token(&self) -> Token {
+        self.token.clone()
+    }
+    fn text(&self) -> String {
+        format!(
+            "({} {} {})",
+            self.left.text(),
+            self.token.text(),
+            self.right.text()
+        )
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Expression for InfixExpression {
+    fn expression_node(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
