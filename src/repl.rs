@@ -1,5 +1,7 @@
+use crate::ast::Node;
 use crate::lexer::lexer::Lexer;
 use crate::lexer::lexer::Token;
+use crate::parser::Parser;
 
 use std::io::{self, Write};
 
@@ -11,11 +13,12 @@ pub fn start() -> Result<(), io::Error> {
 
         io::stdin().read_line(&mut input)?;
         println!();
-        let mut l = Lexer::new(input.as_bytes().to_vec());
-        let mut token = l.next_token();
-        while token != Token::EOF {
-            println!("{:?}", token);
-            token = l.next_token();
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        match program {
+            Ok(p) => println!("{}", p.text()),
+            Err(e) => println!("{}", e),
         }
     }
 }
