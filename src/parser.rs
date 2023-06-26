@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
-        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
-        Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
+        FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
+        PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::lexer::{Lexer, Token},
 };
@@ -47,6 +47,7 @@ impl Parser {
         p.precedences.insert(Token::MINUS, Precedence::SUM);
         p.precedences.insert(Token::SLASH, Precedence::PRODUCT);
         p.precedences.insert(Token::ASTERISK, Precedence::PRODUCT);
+        p.precedences.insert(Token::LPAREN, Precedence::CALL);
 
         p.next_token();
         p.next_token();
@@ -77,6 +78,7 @@ impl Parser {
             | Token::NOTEQUAL
             | Token::LT
             | Token::GT => Ok(Parser::parse_infix_expression),
+            Token::LPAREN => Ok(Parser::parse_call_expression),
             _ => Err("get_infix_fn: no infix parse function for token".to_string()),
         };
     }
@@ -322,6 +324,38 @@ impl Parser {
         let right = self.parse_expression(precedence)?;
         return Ok(Box::new(InfixExpression { token, left, right }));
     }
+
+    fn parse_call_expression(
+        &mut self,
+        function: Box<dyn Expression>,
+    ) -> Result<Box<dyn Expression>, String> {
+        let arguments = self.parse_call_arguments()?;
+        return Ok(Box::new(CallExpression {
+            function,
+            arguments,
+        }));
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Box<dyn Expression>>, String> {
+        let mut args = vec![];
+        if self.peek_token_is(Token::RPAREN) {
+            self.next_token();
+            return Ok(args);
+        }
+        self.next_token();
+        let arg = self.parse_expression(Precedence::LOWEST)?;
+        args.push(arg);
+        while self.peek_token_is(Token::COMMA) {
+            self.next_token();
+            self.next_token();
+            let arg = self.parse_expression(Precedence::LOWEST)?;
+            args.push(arg);
+        }
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_call_arguments: expect_peek failed".to_string());
+        }
+        return Ok(args);
+    }
 }
 
 #[cfg(test)]
@@ -329,6 +363,7 @@ mod tests {
     use std::any::Any;
 
     use crate::ast::BooleanExpression;
+    use crate::ast::CallExpression;
     use crate::ast::Expression;
     use crate::ast::ExpressionStatement;
     use crate::ast::FunctionLiteral;
@@ -584,6 +619,15 @@ mod tests {
             ("2 / (5 + 5)", "(2 / (5 + 5))"),
             ("-(5 + 5)", "(-(5 + 5))"),
             ("!(true == true)", "(!(true == true))"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g))",
+            ),
         ];
 
         for tt in tests {
@@ -797,5 +841,32 @@ mod tests {
                 test_literal_expression(&func.parameters[i], ident);
             }
         }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let l = Lexer::new(input.as_bytes().to_vec());
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        assert!(
+            program.is_ok(),
+            "Expected parsing to succeed. Error: {:?}",
+            program.err()
+        );
+        let program = program.unwrap();
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        let exp = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let call = exp
+            .expression
+            .as_any()
+            .downcast_ref::<CallExpression>()
+            .unwrap();
+        test_identifier(&call.function, &"add");
+        assert_eq!(call.arguments.len(), 3);
+        test_literal_expression(&call.arguments[0], &1);
+        test_infix_expression(&call.arguments[1], &2, "*", &3);
+        test_infix_expression(&call.arguments[2], &4, "+", &5);
     }
 }

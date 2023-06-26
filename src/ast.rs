@@ -304,6 +304,38 @@ impl Expression for IfExpression {
     fn expression_node(&self) {}
 }
 
+#[derive(Debug)]
+pub struct CallExpression {
+    pub function: Box<dyn Expression>,
+    pub arguments: Vec<Box<dyn Expression>>,
+}
+
+impl Node for CallExpression {
+    fn token(&self) -> Token {
+        return Token::LPAREN;
+    }
+    fn text(&self) -> String {
+        let mut s = String::new();
+        s.push_str(&self.function.text());
+        s.push_str("(");
+        for (i, arg) in self.arguments.iter().enumerate() {
+            s.push_str(&arg.text());
+            if i < self.arguments.len() - 1 {
+                s.push_str(", ");
+            }
+        }
+        s.push_str(")");
+        return s;
+    }
+    fn as_any(&self) -> &dyn Any {
+        return self;
+    }
+}
+
+impl Expression for CallExpression {
+    fn expression_node(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
