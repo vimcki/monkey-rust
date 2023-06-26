@@ -116,27 +116,26 @@ impl Parser {
         if !self.expect_peek(Token::ASSIGN) {
             return Err("parse_let_statement: expect_peek failed".to_string());
         }
-        while !self.cur_token_is(Token::SEMICOLON) {
+        self.next_token();
+
+        let value = self.parse_expression(Precedence::LOWEST)?;
+
+        if self.peek_token_is(Token::SEMICOLON) {
             self.next_token();
         }
-        return Ok(Box::new(LetStatement {
-            name,
-            value: Box::new(Identifier {
-                token: Token::IDENT("".to_string()),
-            }),
-        }));
+
+        return Ok(Box::new(LetStatement { name, value }));
     }
 
     fn parse_return_statement(&mut self) -> Result<Box<dyn Statement>, String> {
         self.next_token();
-        while !self.cur_token_is(Token::SEMICOLON) {
+
+        let value = self.parse_expression(Precedence::LOWEST)?;
+
+        if self.peek_token_is(Token::SEMICOLON) {
             self.next_token();
         }
-        return Ok(Box::new(ReturnStatement {
-            value: Box::new(Identifier {
-                token: Token::IDENT("".to_string()),
-            }),
-        }));
+        return Ok(Box::new(ReturnStatement { value }));
     }
 
     fn parse_expression_statement(&mut self) -> Result<Box<dyn Statement>, String> {
@@ -382,21 +381,22 @@ mod tests {
 
     #[test]
     fn test_let_statements() {
-        let input = r#"
-        let x = 5;
-        let y = 10;
-        let foobar = 838383;
-        "#;
-        let l = Lexer::new(input.as_bytes().to_vec());
-        let mut p = Parser::new(l);
-        let program = p.parse_program();
-        assert_eq!(program.is_ok(), true);
-        let program = program.unwrap();
-        assert_eq!(program.statements.len(), 3);
-        let tests = vec!["x", "y", "foobar"];
-        for (i, tt) in tests.iter().enumerate() {
-            let stmt = &program.statements[i];
-            test_let_statement(stmt, tt);
+        let tests: Vec<(&str, &str, Box<dyn Any>)> = vec![
+            ("let x = 5;", "x", Box::new(5)),
+            ("let y = true;", "y", Box::new(true)),
+            ("let foobar = y;", "foobar", Box::new("y")),
+        ];
+        for (input, expected_ident, expected_value) in tests {
+            let l = Lexer::new(input.as_bytes().to_vec());
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            assert_eq!(program.is_ok(), true);
+            let program = program.unwrap();
+            assert_eq!(program.statements.len(), 1);
+            let stmt = &program.statements[0];
+            test_let_statement(stmt, expected_ident);
+            let let_stmt = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+            test_literal_expression(&let_stmt.value, expected_value.as_ref());
         }
     }
 
