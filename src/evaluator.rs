@@ -1,19 +1,12 @@
-use crate::{
-    ast::Node,
-    object::{Null, Object},
-};
+use crate::{ast::Node, object::Object};
 
-pub fn eval(node: Box<dyn Node>) -> Box<dyn Object> {
-    return Box::new(Null {});
+pub fn eval(node: Box<dyn Node>) -> Object {
+    return Object::Null;
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        lexer::lexer::Lexer,
-        object::{Integer, Object},
-        parser::Parser,
-    };
+    use crate::{lexer::lexer::Lexer, object::Object, parser::Parser};
 
     #[test]
     fn test_evel_integer_expression() {
@@ -24,15 +17,17 @@ mod tests {
         }
     }
 
-    fn test_eval(input: &String) -> Box<dyn Object> {
+    fn test_eval(input: &String) -> Object {
         let l = Lexer::new(input.as_bytes().to_vec());
         let mut p = Parser::new(l);
         let program = p.parse_program().unwrap();
         return super::eval(Box::new(program));
     }
 
-    fn test_integer_object(obj: Box<dyn Object>, expected: i64) {
-        let obj_int = obj.as_any().downcast_ref::<Integer>().unwrap();
-        assert_eq!(obj_int.value, expected);
+    fn test_integer_object(obj: Object, expected: i64) {
+        match obj {
+            Object::Integer(i) => assert_eq!(i, expected),
+            _ => panic!("Object is not Integer. got={}", obj.inspect()),
+        }
     }
 }
