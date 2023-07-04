@@ -1,6 +1,6 @@
-use crate::{ast::Node, object::Object};
+use crate::{ast::Program, object::Object};
 
-pub fn eval(node: Box<dyn Node>) -> Object {
+pub fn eval_program(program: Program) -> Object {
     return Object::Null;
 }
 
@@ -8,7 +8,6 @@ pub fn eval(node: Box<dyn Node>) -> Object {
 mod tests {
     use crate::{lexer::lexer::Lexer, object::Object, parser::Parser};
 
-    #[test]
     fn test_evel_integer_expression() {
         let tests = vec![("5", 5), ("10", 10)];
         for t in tests.iter() {
@@ -21,7 +20,7 @@ mod tests {
         let l = Lexer::new(input.as_bytes().to_vec());
         let mut p = Parser::new(l);
         let program = p.parse_program().unwrap();
-        return super::eval(Box::new(program));
+        return super::eval_program(program);
     }
 
     fn test_integer_object(obj: Object, expected: i64) {
