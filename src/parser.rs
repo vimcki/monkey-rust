@@ -84,11 +84,15 @@ impl Parser {
         }
     }
 
-    fn parse_return_statement(&self) -> Result<Statement, String> {
-        todo!()
+    fn parse_return_statement(&mut self) -> Result<Statement, String> {
+        self.next_token();
+        while !self.cur_token_is(Token::SEMICOLON) {
+            self.next_token();
+        }
+        return Ok(Statement::ReturnStatement(Expression::TODO {}));
     }
 
-    fn parse_expression_statement(&self) -> Result<Statement, String> {
+    fn parse_expression_statement(&mut self) -> Result<Statement, String> {
         todo!()
     }
 
@@ -136,6 +140,34 @@ mod tests {
                 }
             }
             _ => panic!("stmt not LetStatement. got={:?}", stmt),
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let input = "
+        return 5;
+        return 10;
+        return 993322;
+        ";
+        let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
+        let mut p = super::Parser::new(l);
+        let program = p.parse_program();
+        if let Err(e) = program {
+            panic!("parse_program: {}", e);
+        }
+        let program = program.unwrap();
+        if program.statements.len() != 3 {
+            panic!(
+                "program.statements does not contain 3 statements. got={}",
+                program.statements.len()
+            );
+        }
+        for stmt in program.statements {
+            match stmt {
+                Statement::ReturnStatement(_) => {}
+                _ => panic!("stmt not ReturnStatement. got={:?}", stmt),
+            }
         }
     }
 }
