@@ -31,12 +31,34 @@ impl Statement {
 
 #[derive(Debug)]
 pub enum Expression {
-    TODO,
+    IdentifierExpression(Identifier),
+    IntegerLiteralExpression(i64),
+    PrefixExpression(Prefix, Box<Expression>),
 }
 
 impl Expression {
     pub fn text(&self) -> String {
-        return String::new();
+        match self {
+            Expression::IdentifierExpression(i) => i.text(),
+            Expression::IntegerLiteralExpression(i) => i.to_string(),
+            Expression::PrefixExpression(op, e) => format!("({}{})", op.text(), e.text()),
+            _ => "TODO".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Prefix {
+    Bang,
+    Minus,
+}
+
+impl Prefix {
+    pub fn text(&self) -> String {
+        match self {
+            Prefix::Bang => "!".to_string(),
+            Prefix::Minus => "-".to_string(),
+        }
     }
 }
 
@@ -45,12 +67,38 @@ pub struct Identifier {
     pub name: String,
 }
 
+impl Identifier {
+    pub fn text(&self) -> String {
+        return self.name.clone();
+    }
+}
+
 pub enum Precedence {
-    PLowest,
-    PEquals,
-    PLessGreater,
-    PSum,
-    PProduct,
-    PCall,
-    PIndex,
+    Lowest,
+    Equals,
+    LessGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call,
+}
+
+#[test]
+fn test_text() {
+    let program = Program {
+        statements: vec![
+            Statement::LetStatement(
+                Identifier {
+                    name: "myVar".to_string(),
+                },
+                Expression::IdentifierExpression(Identifier {
+                    name: "aaa".to_string(),
+                }),
+            ),
+            Statement::ReturnStatement(Expression::IdentifierExpression(Identifier {
+                name: "myVar".to_string(),
+            })),
+        ],
+    };
+    assert_eq!(program.text(), "let myVar = aaa;return myVar;");
 }
