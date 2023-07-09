@@ -24,7 +24,7 @@ impl Statement {
         match self {
             Statement::LetStatement(i, e) => format!("let {} = {};", i.name, e.text()),
             Statement::ReturnStatement(e) => format!("return {};", e.text()),
-            Statement::ExpressionStatement(e) => format!("{};", e.text()),
+            Statement::ExpressionStatement(e) => format!("{}", e.text()),
         }
     }
 }
@@ -32,17 +32,37 @@ impl Statement {
 #[derive(Debug)]
 pub enum Expression {
     IdentifierExpression(Identifier),
-    IntegerLiteralExpression(i64),
+    LiteralExpression(Literal),
     PrefixExpression(Prefix, Box<Expression>),
+    InfixExpression(Box<Expression>, Infix, Box<Expression>),
 }
 
 impl Expression {
     pub fn text(&self) -> String {
         match self {
             Expression::IdentifierExpression(i) => i.text(),
-            Expression::IntegerLiteralExpression(i) => i.to_string(),
+            Expression::LiteralExpression(l) => l.text(),
             Expression::PrefixExpression(op, e) => format!("({}{})", op.text(), e.text()),
-            _ => "TODO".to_string(),
+            Expression::InfixExpression(l, op, r) => {
+                format!("({} {} {})", l.text(), op.text(), r.text())
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Literal {
+    IntegerLiteral(i64),
+    BooleanLiteral(bool),
+    StringLiteral(String),
+}
+
+impl Literal {
+    pub fn text(&self) -> String {
+        match self {
+            Literal::IntegerLiteral(i) => i.to_string(),
+            Literal::BooleanLiteral(b) => b.to_string(),
+            Literal::StringLiteral(s) => s.clone(),
         }
     }
 }
@@ -73,6 +93,7 @@ impl Identifier {
     }
 }
 
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum Precedence {
     Lowest,
     Equals,
@@ -81,6 +102,33 @@ pub enum Precedence {
     Product,
     Prefix,
     Call,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Infix {
+    Plus,
+    Minus,
+    Asterisk,
+    Slash,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+}
+
+impl Infix {
+    pub fn text(&self) -> String {
+        match self {
+            Infix::Plus => "+".to_string(),
+            Infix::Minus => "-".to_string(),
+            Infix::Asterisk => "*".to_string(),
+            Infix::Slash => "/".to_string(),
+            Infix::Eq => "==".to_string(),
+            Infix::NotEq => "!=".to_string(),
+            Infix::Lt => "<".to_string(),
+            Infix::Gt => ">".to_string(),
+        }
+    }
 }
 
 #[test]

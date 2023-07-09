@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Identifier, Precedence, Prefix, Program, Statement},
+    ast::{Expression, Identifier, Infix, Literal, Precedence, Prefix, Program, Statement},
     lexer::lexer::{Lexer, Token},
 };
 
@@ -25,20 +25,77 @@ impl Parser {
 
     fn get_prefix_parse_fn(
         &self,
-        t: Token,
+        t: &Token,
     ) -> Option<fn(&mut Parser) -> Result<Expression, String>> {
         match t {
             Token::IDENT(_) => Some(Parser::parse_identifier),
             Token::INT(_) => Some(Parser::parse_integer_literal),
             Token::BANG | Token::MINUS => Some(Parser::parse_prefix_expression),
+            Token::TRUE | Token::FALSE => Some(Parser::parse_boolean),
             _ => None,
         }
     }
 
-    fn get_infix_parse_fn(&self, t: Token) -> Option<fn(Expression) -> Expression> {
+    fn get_infix_parse_fn(
+        &self,
+        t: &Token,
+    ) -> Option<fn(&mut Parser, Expression) -> Result<Expression, String>> {
         match t {
+            Token::PLUS => Some(Parser::parse_infix_expression),
+            Token::MINUS => Some(Parser::parse_infix_expression),
+            Token::SLASH => Some(Parser::parse_infix_expression),
+            Token::ASTERISK => Some(Parser::parse_infix_expression),
+            Token::EQUAL => Some(Parser::parse_infix_expression),
+            Token::NOTEQUAL => Some(Parser::parse_infix_expression),
+            Token::LT => Some(Parser::parse_infix_expression),
+            Token::GT => Some(Parser::parse_infix_expression),
             _ => None,
         }
+    }
+
+    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, String> {
+        let operator = match self.cur_token.clone() {
+            Token::PLUS => Infix::Plus,
+            Token::MINUS => Infix::Minus,
+            Token::SLASH => Infix::Slash,
+            Token::ASTERISK => Infix::Asterisk,
+            Token::EQUAL => Infix::Eq,
+            Token::NOTEQUAL => Infix::NotEq,
+            Token::LT => Infix::Lt,
+            Token::GT => Infix::Gt,
+            _ => return Err("parse_infix_expression: cur_token is not PLUS".to_string()),
+        };
+
+        let precedence = self.cur_precedence();
+        self.next_token();
+        let right = self.parse_expression(precedence)?;
+        return Ok(Expression::InfixExpression(
+            Box::new(left),
+            operator,
+            Box::new(right),
+        ));
+    }
+
+    fn get_precedence(&self, t: &Token) -> Precedence {
+        match t {
+            Token::EQUAL => Precedence::Equals,
+            Token::NOTEQUAL => Precedence::Equals,
+            Token::LT => Precedence::LessGreater,
+            Token::GT => Precedence::LessGreater,
+            Token::PLUS => Precedence::Sum,
+            Token::MINUS => Precedence::Sum,
+            Token::SLASH => Precedence::Product,
+            Token::ASTERISK => Precedence::Product,
+            _ => Precedence::Lowest,
+        }
+    }
+
+    fn peek_precedence(&self) -> Precedence {
+        return self.get_precedence(&self.peek_token);
+    }
+
+    fn cur_precedence(&self) -> Precedence {
+        return self.get_precedence(&self.cur_token);
     }
 
     fn parse_identifier(&mut self) -> Result<Expression, String> {
@@ -135,11 +192,25 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, lowest: Precedence) -> Result<Expression, String> {
-        let prefix = self.get_prefix_parse_fn(self.cur_token.clone());
-        if prefix.is_none() {
-            return Err("parse_expression: no prefix parse function for token".to_string());
+        let mut left_exp = match self.get_prefix_parse_fn(&self.cur_token) {
+            Some(prefix) => prefix(self),
+            None => {
+                return Err(format!(
+                    "parse_expression: no prefix parse function for token {:?}",
+                    self.cur_token
+                ))
+            }
+        };
+
+        while !self.peek_token_is(Token::SEMICOLON) && lowest < self.peek_precedence() {
+            match self.get_infix_parse_fn(&self.peek_token) {
+                Some(infix) => {
+                    self.next_token();
+                    left_exp = infix(self, left_exp.unwrap());
+                }
+                None => return left_exp,
+            };
         }
-        let mut left_exp = prefix.unwrap()(self);
         return left_exp;
     }
 
@@ -154,7 +225,22 @@ impl Parser {
             }
         };
         let value = value.parse::<i64>().unwrap();
-        return Ok(Expression::IntegerLiteralExpression(value));
+        return Ok(Expression::LiteralExpression(Literal::IntegerLiteral(
+            value,
+        )));
+    }
+
+    fn parse_boolean(&mut self) -> Result<Expression, String> {
+        return match self.cur_token {
+            Token::TRUE => Ok(Expression::LiteralExpression(Literal::BooleanLiteral(true))),
+            Token::FALSE => Ok(Expression::LiteralExpression(Literal::BooleanLiteral(
+                false,
+            ))),
+            _ => Err(format!(
+                "parse_boolean: cur_token is not TRUE or FALSE. got={:?}",
+                self.cur_token
+            )),
+        };
     }
 
     fn parse_prefix_expression(&mut self) -> Result<Expression, String> {
@@ -176,7 +262,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Expression, Prefix, Statement};
+    use crate::ast::{self, Expression, Infix, Literal, Prefix, Statement};
 
     #[test]
     fn test_let_statements() {
@@ -263,7 +349,7 @@ mod tests {
         let stmt = &program.statements[0];
         match stmt {
             Statement::ExpressionStatement(stmt) => match stmt {
-                crate::ast::Expression::IdentifierExpression(ident) => {
+                ast::Expression::IdentifierExpression(ident) => {
                     if ident.name != "foobar" {
                         panic!("ident.name not {}. got={}", "foobar", ident.name);
                     }
@@ -293,7 +379,7 @@ mod tests {
         let stmt = &program.statements[0];
         match stmt {
             Statement::ExpressionStatement(stmt) => match stmt {
-                crate::ast::Expression::IntegerLiteralExpression(int) => {
+                ast::Expression::LiteralExpression(Literal::IntegerLiteral(int)) => {
                     if *int != 5 {
                         panic!("int.value not {}. got={}", 5, int);
                     }
@@ -325,7 +411,7 @@ mod tests {
             let stmt = &program.statements[0];
             match stmt {
                 Statement::ExpressionStatement(stmt) => match stmt {
-                    crate::ast::Expression::PrefixExpression(prefix, inner_expr) => {
+                    ast::Expression::PrefixExpression(prefix, inner_expr) => {
                         if *prefix != tt.1 {
                             panic!("prefix.operator is not {:?}. got={:?}", tt.1, prefix);
                         }
@@ -340,12 +426,224 @@ mod tests {
 
     fn tes_integer_literal(expression: &Expression, value: i64) {
         match expression {
-            Expression::IntegerLiteralExpression(int) => {
+            Expression::LiteralExpression(Literal::IntegerLiteral(int)) => {
                 if *int != value {
                     panic!("int.value not {}. got={}", value, int);
                 }
             }
             _ => panic!("expression not IntegerLiteral. got={:?}", expression),
+        }
+    }
+
+    #[test]
+    fn test_parsing_infix_expressions() {
+        let infix_tests = vec![
+            (
+                "5 + 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Plus,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 - 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Minus,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 * 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Asterisk,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 / 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Slash,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 > 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Gt,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 < 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Lt,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 == 5;",
+                Literal::IntegerLiteral(5),
+                Infix::Eq,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "5 != 5;",
+                Literal::IntegerLiteral(5),
+                Infix::NotEq,
+                Literal::IntegerLiteral(5),
+            ),
+            (
+                "true == true",
+                Literal::BooleanLiteral(true),
+                Infix::Eq,
+                Literal::BooleanLiteral(true),
+            ),
+            (
+                "true != false",
+                Literal::BooleanLiteral(true),
+                Infix::NotEq,
+                Literal::BooleanLiteral(false),
+            ),
+            (
+                "false == false",
+                Literal::BooleanLiteral(false),
+                Infix::Eq,
+                Literal::BooleanLiteral(false),
+            ),
+        ];
+        for tt in infix_tests {
+            let input = tt.0;
+            let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
+            let mut p = super::Parser::new(l);
+            let program = p.parse_program();
+            if let Err(e) = program {
+                panic!("parse_program: {}", e);
+            }
+            let program = program.unwrap();
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statements. got={}",
+                    program.statements.len()
+                );
+            }
+            let stmt = &program.statements[0];
+            match stmt {
+                Statement::ExpressionStatement(stmt) => match stmt {
+                    ast::Expression::InfixExpression(left, infix, right) => {
+                        test_literal_expression(left, &tt.1);
+                        if *infix != tt.2 {
+                            panic!("infix.operator is not {:?}. got={:?}", tt.2, infix);
+                        }
+                        test_literal_expression(right, &tt.3);
+                    }
+                    _ => panic!("stmt.expression not InfixExpression. got={:?}", stmt),
+                },
+                _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
+            }
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence() {
+        let tests = vec![
+            ("-a * b", "((-a) * b)"),
+            ("!-a", "(!(-a))"),
+            ("a + b + c", "((a + b) + c)"),
+            ("a + b - c", "((a + b) - c)"),
+            ("a * b * c", "((a * b) * c)"),
+            ("a * b / c", "((a * b) / c)"),
+            ("a + b / c", "(a + (b / c))"),
+            ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"),
+            ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
+            ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
+            ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
+            ("true", "true"),
+            ("false", "false"),
+            ("3 > 5 == false", "((3 > 5) == false)"),
+            ("3 < 5 == true", "((3 < 5) == true)"),
+        ];
+
+        for tt in tests {
+            let l = crate::lexer::lexer::Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = super::Parser::new(l);
+            let program = p.parse_program();
+            if let Err(e) = program {
+                panic!("parse_program: {}", e);
+            }
+            let program = program.unwrap();
+            let actual = program.text();
+            if actual != tt.1 {
+                panic!("expected={}, got={}", tt.1, actual);
+            }
+        }
+    }
+
+    fn test_identifier(expression: &Expression, value: &str) {
+        match expression {
+            Expression::IdentifierExpression(ident) => {
+                if ident.name != value {
+                    panic!("ident.value not {}. got={}", value, ident.name);
+                }
+            }
+            _ => panic!("expression not Identifier. got={:?}", expression),
+        }
+    }
+
+    fn test_literal_expression(expression: &Expression, expected: &Literal) {
+        match expression {
+            Expression::LiteralExpression(literal) => match literal {
+                Literal::IntegerLiteral(int) => {
+                    tes_integer_literal(expression, *int);
+                }
+                Literal::BooleanLiteral(boolean) => {
+                    test_boolean_literal(expression, *boolean);
+                }
+                Literal::StringLiteral(string) => {
+                    test_string_literal(expression, string);
+                }
+            },
+            _ => panic!("expression not Literal. got={:?}", expression),
+        }
+    }
+
+    fn test_boolean_literal(expression: &Expression, value: bool) {
+        match expression {
+            Expression::LiteralExpression(Literal::BooleanLiteral(boolean)) => {
+                if *boolean != value {
+                    panic!("boolean.value not {}. got={}", value, boolean);
+                }
+            }
+            _ => panic!("expression not BooleanLiteral. got={:?}", expression),
+        }
+    }
+
+    fn test_string_literal(expression: &Expression, value: &str) {
+        match expression {
+            Expression::LiteralExpression(Literal::StringLiteral(string)) => {
+                if *string != value {
+                    panic!("string.value not {}. got={}", value, string);
+                }
+            }
+            _ => panic!("expression not StringLiteral. got={:?}", expression),
+        }
+    }
+
+    fn test_infix_expression(
+        expression: &Expression,
+        left_lit: &Literal,
+        want_operator: &Infix,
+        right_lit: &Literal,
+    ) {
+        match expression {
+            Expression::InfixExpression(left, operator, right) => {
+                test_literal_expression(left, left_lit);
+                if *want_operator != *operator {
+                    panic!(
+                        "expression.operator is not {:?}. got={:?}",
+                        operator, operator
+                    );
+                }
+                test_literal_expression(right, right_lit);
+            }
+            _ => panic!("expression not InfixExpression. got={:?}", expression),
         }
     }
 }
