@@ -151,13 +151,16 @@ impl Parser {
         if !self.expect_peek(Token::ASSIGN) {
             return Err("parse_let_statement: expect_peek failed".to_string());
         }
-        while !self.cur_token_is(Token::SEMICOLON) {
+
+        self.next_token();
+
+        let expr = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token_is(Token::SEMICOLON) {
             self.next_token();
         }
+
         let ident = Identifier { name };
-        let expr = Expression::IdentifierExpression(Identifier {
-            name: "".to_string(),
-        });
         return Ok(Statement::LetStatement(ident, expr));
     }
 
@@ -182,14 +185,14 @@ impl Parser {
 
     fn parse_return_statement(&mut self) -> Result<Statement, String> {
         self.next_token();
-        while !self.cur_token_is(Token::SEMICOLON) {
+
+        let expr = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token_is(Token::SEMICOLON) {
             self.next_token();
         }
-        return Ok(Statement::ReturnStatement(
-            Expression::IdentifierExpression(Identifier {
-                name: "".to_string(),
-            }),
-        ));
+
+        return Ok(Statement::ReturnStatement(expr));
     }
 
     fn parse_expression_statement(&mut self) -> Result<Statement, String> {
@@ -392,28 +395,53 @@ mod tests {
 
     #[test]
     fn test_let_statements() {
-        let input = "
-        let x = 5;
-        let y = 10;
-        let foobar = 838383;
-        ";
-        let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
-        let mut p = super::Parser::new(l);
-        let program = p.parse_program();
-        if let Err(e) = program {
-            panic!("parse_program: {}", e);
-        }
-        let program = program.unwrap();
-        if program.statements.len() != 3 {
-            panic!(
-                "program.statements does not contain 3 statements. got={}",
-                program.statements.len()
-            );
-        }
-        let tests = vec!["x", "y", "foobar"];
-        for (i, tt) in tests.iter().enumerate() {
-            let stmt = &program.statements[i];
-            test_let_statement(stmt, tt);
+        let tests = vec![
+            (
+                "let x = 5;",
+                "x",
+                Expression::LiteralExpression(Literal::IntegerLiteral(5)),
+            ),
+            (
+                "let y = true;",
+                "y",
+                Expression::LiteralExpression(Literal::BooleanLiteral(true)),
+            ),
+            (
+                "let foobar = y;",
+                "foobar",
+                Expression::IdentifierExpression(Identifier {
+                    name: "y".to_string(),
+                }),
+            ),
+        ];
+
+        for (input, expected_identifier, expected_value) in tests {
+            let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
+            let mut p = super::Parser::new(l);
+            let program = p.parse_program();
+            if let Err(e) = program {
+                panic!("parse_program: {}", e);
+            }
+            let program = program.unwrap();
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statements. got={}",
+                    program.statements.len()
+                );
+            }
+            let stmt = &program.statements[0];
+            test_let_statement(stmt, expected_identifier);
+            let expr = match stmt {
+                Statement::LetStatement(_, expr) => expr,
+                _ => panic!("stmt not LetStatement. got={:?}", stmt),
+            };
+            if expr.text() != expected_value.text() {
+                panic!(
+                    "let_stmt.value not {}. got={}",
+                    expected_value.text(),
+                    expr.text()
+                );
+            }
         }
     }
 
