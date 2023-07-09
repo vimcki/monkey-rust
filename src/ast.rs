@@ -48,6 +48,10 @@ pub enum Expression {
         consequence: Box<Statement>,
         alternative: Option<Box<Statement>>,
     },
+    FunctionExpression {
+        parameters: Vec<Identifier>,
+        body: Box<Statement>,
+    },
 }
 
 impl Expression {
@@ -68,6 +72,19 @@ impl Expression {
                 if let Some(a) = alternative {
                     text.push_str(&format!("else {}", a.text()));
                 }
+                text
+            }
+            Expression::FunctionExpression { parameters, body } => {
+                let mut text = String::new();
+                text.push_str("fn(");
+                for (i, p) in parameters.iter().enumerate() {
+                    if i != 0 {
+                        text.push_str(", ");
+                    }
+                    text.push_str(&p.text());
+                }
+                text.push_str(") ");
+                text.push_str(&body.text());
                 text
             }
         }

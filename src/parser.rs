@@ -34,6 +34,7 @@ impl Parser {
             Token::TRUE | Token::FALSE => Some(Parser::parse_boolean),
             Token::LPAREN => Some(Parser::parse_grouped_expression),
             Token::IF => Some(Parser::parse_if_expression),
+            Token::FUNCTION => Some(Parser::parse_function_expression),
             _ => None,
         }
     }
@@ -252,6 +253,51 @@ impl Parser {
             return Err("parse_grouped_expression: expect_peek failed".to_string());
         }
         return exp;
+    }
+
+    fn parse_function_expression(&mut self) -> Result<Expression, String> {
+        if !self.expect_peek(Token::LPAREN) {
+            return Err("parse_function_expression: expect_peek failed".to_string());
+        }
+        let parameters = self.parse_function_parameters()?;
+        if !self.expect_peek(Token::LBRACE) {
+            return Err("parse_function_expression: expect_peek failed".to_string());
+        }
+        let body = Box::new(self.parse_block_statement()?);
+        return Ok(Expression::FunctionExpression { parameters, body });
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<Identifier>, String> {
+        let mut identifiers = Vec::new();
+        if self.peek_token_is(Token::RPAREN) {
+            self.next_token();
+            return Ok(identifiers);
+        }
+        self.next_token();
+        let ident = Identifier {
+            name: match self.cur_token {
+                Token::IDENT(ref s) => s.clone(),
+                _ => return Err("parse_function_parameters: cur_token is not IDENT".to_string()),
+            },
+        };
+        identifiers.push(ident);
+        while self.peek_token_is(Token::COMMA) {
+            self.next_token();
+            self.next_token();
+            let ident = Identifier {
+                name: match self.cur_token {
+                    Token::IDENT(ref s) => s.clone(),
+                    _ => {
+                        return Err("parse_function_parameters: cur_token is not IDENT".to_string())
+                    }
+                },
+            };
+            identifiers.push(ident);
+        }
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_function_parameters: expect_peek failed".to_string());
+        }
+        return Ok(identifiers);
     }
 
     fn parse_if_expression(&mut self) -> Result<Expression, String> {
@@ -807,6 +853,109 @@ mod tests {
                         }
                     }
                     _ => panic!("expression not IfExpression. got={:?}", expr),
+                },
+                _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
+            }
+        }
+    }
+
+    #[test]
+    fn test_function_expression() {
+        let input = "fn(x, y) { x + y; }";
+        let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
+        let mut p = super::Parser::new(l);
+        let program = p.parse_program();
+        if let Err(e) = program {
+            panic!("parse_program: {}", e);
+        }
+        let program = program.unwrap();
+        if program.statements.len() != 1 {
+            panic!(
+                "program.statements does not contain 1 statements. got={}",
+                program.statements.len()
+            );
+        }
+        let stmt = &program.statements[0];
+        match stmt {
+            Statement::ExpressionStatement(expr) => match expr {
+                Expression::FunctionExpression { parameters, body } => {
+                    if parameters.len() != 2 {
+                        panic!(
+                            "function literal parameters wrong. want 2, got={}",
+                            parameters.len()
+                        );
+                    }
+                    if parameters[0].text() != "x" {
+                        panic!(
+                            "parameter[0] wrong. want {}, got={}",
+                            "x",
+                            parameters[0].text()
+                        );
+                    }
+                    if parameters[1].text() != "y" {
+                        panic!(
+                            "parameter[1] wrong. want {}, got={}",
+                            "y",
+                            parameters[1].text()
+                        );
+                    }
+                    if body.text() != "(x + y)" {
+                        panic!("body wrong. want {}, got={}", "{ x + y; }", body.text());
+                    }
+                }
+                _ => panic!("expression not FunctionExpression. got={:?}", expr),
+            },
+            _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
+        }
+    }
+
+    #[test]
+    fn test_function_parameters() {
+        let tests = vec![
+            ("fn() {};", vec![]),
+            ("fn(x) {};", vec!["x"]),
+            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+        for tt in tests {
+            let l = crate::lexer::lexer::Lexer::new(tt.0.as_bytes().to_vec());
+            let mut p = super::Parser::new(l);
+            let program = p.parse_program();
+            if let Err(e) = program {
+                panic!("parse_program: {}", e);
+            }
+            let program = program.unwrap();
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statements. got={}",
+                    program.statements.len()
+                );
+            }
+            let stmt = &program.statements[0];
+            match stmt {
+                Statement::ExpressionStatement(expr) => match expr {
+                    Expression::FunctionExpression { parameters, body } => {
+                        if parameters.len() != tt.1.len() {
+                            panic!(
+                                "function literal parameters wrong. want {}, got={}",
+                                tt.1.len(),
+                                parameters.len()
+                            );
+                        }
+                        for (i, ident) in parameters.iter().enumerate() {
+                            if ident.text() != tt.1[i] {
+                                panic!(
+                                    "parameter[{}] wrong. want {}, got={}",
+                                    i,
+                                    tt.1[i],
+                                    ident.text()
+                                );
+                            }
+                        }
+                        if body.text() != "" {
+                            panic!("body wrong. want {}, got={}", "{}", body.text());
+                        }
+                    }
+                    _ => panic!("expression not FunctionExpression. got={:?}", expr),
                 },
                 _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
             }
