@@ -32,6 +32,8 @@ impl Parser {
             Token::INT(_) => Some(Parser::parse_integer_literal),
             Token::BANG | Token::MINUS => Some(Parser::parse_prefix_expression),
             Token::TRUE | Token::FALSE => Some(Parser::parse_boolean),
+            Token::LPAREN => Some(Parser::parse_grouped_expression),
+            Token::IF => Some(Parser::parse_if_expression),
             _ => None,
         }
     }
@@ -243,6 +245,56 @@ impl Parser {
         };
     }
 
+    fn parse_grouped_expression(&mut self) -> Result<Expression, String> {
+        self.next_token();
+        let exp = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_grouped_expression: expect_peek failed".to_string());
+        }
+        return exp;
+    }
+
+    fn parse_if_expression(&mut self) -> Result<Expression, String> {
+        if !self.expect_peek(Token::LPAREN) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        self.next_token();
+        let condition = self.parse_expression(Precedence::Lowest)?;
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        if !self.expect_peek(Token::LBRACE) {
+            return Err("parse_if_expression: expect_peek failed".to_string());
+        }
+        let consequence = self.parse_block_statement()?;
+        let alternative = match self.peek_token {
+            Token::ELSE => {
+                self.next_token();
+                if !self.expect_peek(Token::LBRACE) {
+                    return Err("parse_if_expression: expect_peek failed".to_string());
+                }
+                Some(self.parse_block_statement()?)
+            }
+            _ => None,
+        };
+        return Ok(Expression::IfExpression {
+            condition: Box::new(condition),
+            consequence: Box::new(consequence),
+            alternative: alternative.map(|x| Box::new(x)),
+        });
+    }
+
+    fn parse_block_statement(&mut self) -> Result<Statement, String> {
+        let mut statements = Vec::new();
+        self.next_token();
+        while !self.cur_token_is(Token::RBRACE) {
+            let stmt = self.parse_statement()?;
+            statements.push(stmt);
+            self.next_token();
+        }
+        return Ok(Statement::BlockStatement(statements));
+    }
+
     fn parse_prefix_expression(&mut self) -> Result<Expression, String> {
         let operator = match self.cur_token {
             Token::BANG => Prefix::Bang,
@@ -262,7 +314,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{self, Expression, Infix, Literal, Prefix, Statement};
+    use crate::ast::{self, Expression, Identifier, Infix, Literal, Prefix, Statement};
 
     #[test]
     fn test_let_statements() {
@@ -392,7 +444,12 @@ mod tests {
 
     #[test]
     fn test_parsing_prefix_expression() {
-        let prefix_tests = vec![("!5", Prefix::Bang, 5), ("-15", Prefix::Minus, 15)];
+        let prefix_tests = vec![
+            ("!5", Prefix::Bang, Literal::IntegerLiteral(5)),
+            ("-15", Prefix::Minus, Literal::IntegerLiteral(15)),
+            ("!true", Prefix::Bang, Literal::BooleanLiteral(true)),
+            ("!false", Prefix::Bang, Literal::BooleanLiteral(false)),
+        ];
         for tt in prefix_tests {
             let input = tt.0;
             let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
@@ -415,7 +472,7 @@ mod tests {
                         if *prefix != tt.1 {
                             panic!("prefix.operator is not {:?}. got={:?}", tt.1, prefix);
                         }
-                        tes_integer_literal(inner_expr, tt.2);
+                        test_literal_expression(inner_expr, &tt.2);
                     }
                     _ => panic!("stmt.expression not PrefixExpression. got={:?}", stmt),
                 },
@@ -559,6 +616,11 @@ mod tests {
             ("false", "false"),
             ("3 > 5 == false", "((3 > 5) == false)"),
             ("3 < 5 == true", "((3 < 5) == true)"),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            ("-(5 + 5)", "(-(5 + 5))"),
+            ("!(true == true)", "(!(true == true))"),
         ];
 
         for tt in tests {
@@ -644,6 +706,110 @@ mod tests {
                 test_literal_expression(right, right_lit);
             }
             _ => panic!("expression not InfixExpression. got={:?}", expression),
+        }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = vec!["if (x < y) { x }", "if (x < y) { x } else { y }"];
+        let expected_condition = vec![
+            (Expression::InfixExpression(
+                Box::new(Expression::IdentifierExpression(Identifier {
+                    name: "x".to_string(),
+                })),
+                Infix::Lt,
+                Box::new(Expression::IdentifierExpression(Identifier {
+                    name: "y".to_string(),
+                })),
+            )),
+            (Expression::InfixExpression(
+                Box::new(Expression::IdentifierExpression(Identifier {
+                    name: "x".to_string(),
+                })),
+                Infix::Lt,
+                Box::new(Expression::IdentifierExpression(Identifier {
+                    name: "y".to_string(),
+                })),
+            )),
+        ];
+        let expected_consequence = vec![
+            (Statement::ExpressionStatement(Expression::IdentifierExpression(Identifier {
+                name: "x".to_string(),
+            }))),
+            (Statement::ExpressionStatement(Expression::IdentifierExpression(Identifier {
+                name: "x".to_string(),
+            }))),
+        ];
+        let expected_alternative = vec![
+            None,
+            Some(Statement::ExpressionStatement(
+                Expression::IdentifierExpression(Identifier {
+                    name: "y".to_string(),
+                }),
+            )),
+        ];
+
+        for (i, tt) in input.iter().enumerate() {
+            let l = crate::lexer::lexer::Lexer::new(tt.as_bytes().to_vec());
+            let mut p = super::Parser::new(l);
+            let program = p.parse_program();
+            if let Err(e) = program {
+                panic!("parse_program: {}", e);
+            }
+            let program = program.unwrap();
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statements. got={}",
+                    program.statements.len()
+                );
+            }
+            let stmt = &program.statements[0];
+            match stmt {
+                Statement::ExpressionStatement(expr) => match expr {
+                    Expression::IfExpression {
+                        condition,
+                        consequence,
+                        alternative,
+                    } => {
+                        if condition.text() != expected_condition[i].text() {
+                            panic!(
+                                "condition not {}. got={}",
+                                expected_condition[i].text(),
+                                condition.text()
+                            );
+                        }
+                        if consequence.text() != expected_consequence[i].text() {
+                            panic!(
+                                "consequence not {}. got={}",
+                                expected_consequence[i].text(),
+                                consequence.text()
+                            );
+                        }
+                        match alternative {
+                            Some(alt) => {
+                                if alt.text() != expected_alternative[i].as_ref().unwrap().text() {
+                                    panic!(
+                                        "alternative not {}. got={}",
+                                        expected_alternative[i].as_ref().unwrap().text(),
+                                        alt.text()
+                                    );
+                                }
+                            }
+                            None => {
+                                if expected_alternative[i].is_some() {
+                                    panic!(
+                                        "alternative not {}. got={}",
+                                        expected_alternative[i].as_ref().unwrap().text(),
+                                        "None"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    _ => panic!("expression not IfExpression. got={:?}", expr),
+                },
+                _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
+            }
         }
     }
 }

@@ -17,6 +17,7 @@ pub enum Statement {
     LetStatement(Identifier, Expression),
     ReturnStatement(Expression),
     ExpressionStatement(Expression),
+    BlockStatement(Vec<Statement>),
 }
 
 impl Statement {
@@ -25,6 +26,13 @@ impl Statement {
             Statement::LetStatement(i, e) => format!("let {} = {};", i.name, e.text()),
             Statement::ReturnStatement(e) => format!("return {};", e.text()),
             Statement::ExpressionStatement(e) => format!("{}", e.text()),
+            Statement::BlockStatement(s) => {
+                let mut text = String::new();
+                for s in s.iter() {
+                    text.push_str(&s.text());
+                }
+                return text;
+            }
         }
     }
 }
@@ -35,6 +43,11 @@ pub enum Expression {
     LiteralExpression(Literal),
     PrefixExpression(Prefix, Box<Expression>),
     InfixExpression(Box<Expression>, Infix, Box<Expression>),
+    IfExpression {
+        condition: Box<Expression>,
+        consequence: Box<Statement>,
+        alternative: Option<Box<Statement>>,
+    },
 }
 
 impl Expression {
@@ -45,6 +58,17 @@ impl Expression {
             Expression::PrefixExpression(op, e) => format!("({}{})", op.text(), e.text()),
             Expression::InfixExpression(l, op, r) => {
                 format!("({} {} {})", l.text(), op.text(), r.text())
+            }
+            Expression::IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                let mut text = format!("if {} {}", condition.text(), consequence.text());
+                if let Some(a) = alternative {
+                    text.push_str(&format!("else {}", a.text()));
+                }
+                text
             }
         }
     }
