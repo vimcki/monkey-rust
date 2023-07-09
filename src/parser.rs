@@ -52,8 +52,17 @@ impl Parser {
             Token::NOTEQUAL => Some(Parser::parse_infix_expression),
             Token::LT => Some(Parser::parse_infix_expression),
             Token::GT => Some(Parser::parse_infix_expression),
+            Token::LPAREN => Some(Parser::parse_call_expression),
             _ => None,
         }
+    }
+
+    fn parse_call_expression(&mut self, left: Expression) -> Result<Expression, String> {
+        let arguments = self.parse_call_arguments()?;
+        return Ok(Expression::CallExpression {
+            function: Box::new(left),
+            arguments,
+        });
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, String> {
@@ -89,6 +98,7 @@ impl Parser {
             Token::MINUS => Precedence::Sum,
             Token::SLASH => Precedence::Product,
             Token::ASTERISK => Precedence::Product,
+            Token::LPAREN => Precedence::Call,
             _ => Precedence::Lowest,
         }
     }
@@ -355,6 +365,24 @@ impl Parser {
         self.next_token();
         let right = self.parse_expression(Precedence::Prefix)?;
         return Ok(Expression::PrefixExpression(operator, Box::new(right)));
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, String> {
+        let mut args = Vec::new();
+        if self.peek_token_is(Token::RPAREN) {
+            return Ok(args);
+        }
+        self.next_token();
+        args.push(self.parse_expression(Precedence::Lowest)?);
+        while self.peek_token_is(Token::COMMA) {
+            self.next_token();
+            self.next_token();
+            args.push(self.parse_expression(Precedence::Lowest)?);
+        }
+        if !self.expect_peek(Token::RPAREN) {
+            return Err("parse_call_arguments: expect_peek failed".to_string());
+        }
+        return Ok(args);
     }
 }
 
@@ -667,6 +695,15 @@ mod tests {
             ("2 / (5 + 5)", "(2 / (5 + 5))"),
             ("-(5 + 5)", "(-(5 + 5))"),
             ("!(true == true)", "(!(true == true))"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g))",
+            ),
         ];
 
         for tt in tests {
@@ -959,6 +996,67 @@ mod tests {
                 },
                 _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
             }
+        }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let l = crate::lexer::lexer::Lexer::new(input.as_bytes().to_vec());
+        let mut p = super::Parser::new(l);
+        let program = p.parse_program();
+        if let Err(e) = program {
+            panic!("parse_program: {}", e);
+        }
+        let program = program.unwrap();
+        if program.statements.len() != 1 {
+            panic!(
+                "program.statements does not contain 1 statements. got={}",
+                program.statements.len()
+            );
+        }
+        let stmt = &program.statements[0];
+        match stmt {
+            Statement::ExpressionStatement(expr) => match expr {
+                Expression::CallExpression {
+                    function,
+                    arguments,
+                } => {
+                    if function.text() != "add" {
+                        panic!(
+                            "function identifier wrong. want {}, got={}",
+                            "add",
+                            function.text()
+                        );
+                    }
+                    if arguments.len() != 3 {
+                        panic!("arguments wrong. want {}, got={}", 3, arguments.len());
+                    }
+                    if arguments[0].text() != "1" {
+                        panic!(
+                            "arguments[0] wrong. want {}, got={}",
+                            "1",
+                            arguments[0].text()
+                        );
+                    }
+                    if arguments[1].text() != "(2 * 3)" {
+                        panic!(
+                            "arguments[1] wrong. want {}, got={}",
+                            "(2 * 3)",
+                            arguments[1].text()
+                        );
+                    }
+                    if arguments[2].text() != "(4 + 5)" {
+                        panic!(
+                            "arguments[2] wrong. want {}, got={}",
+                            "(4 + 5)",
+                            arguments[2].text()
+                        );
+                    }
+                }
+                _ => panic!("expression not CallExpression. got={:?}", expr),
+            },
+            _ => panic!("stmt not ExpressionStatement. got={:?}", stmt),
         }
     }
 }

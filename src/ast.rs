@@ -52,6 +52,10 @@ pub enum Expression {
         parameters: Vec<Identifier>,
         body: Box<Statement>,
     },
+    CallExpression {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 impl Expression {
@@ -85,6 +89,22 @@ impl Expression {
                 }
                 text.push_str(") ");
                 text.push_str(&body.text());
+                text
+            }
+            Expression::CallExpression {
+                function,
+                arguments,
+            } => {
+                let mut text = String::new();
+                text.push_str(&function.text());
+                text.push_str("(");
+                for (i, a) in arguments.iter().enumerate() {
+                    if i != 0 {
+                        text.push_str(", ");
+                    }
+                    text.push_str(&a.text());
+                }
+                text.push_str(")");
                 text
             }
         }
