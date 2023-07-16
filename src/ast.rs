@@ -1,365 +1,213 @@
-use std::{any::Any, fmt};
-
-use crate::lexer::lexer::Token;
-
-pub trait Node: fmt::Debug {
-    fn token(&self) -> Token;
-    fn text(&self) -> String;
-    fn as_any(&self) -> &dyn Any;
-}
-
-pub trait Statement: Node {
-    fn statement_node(&self);
-}
-
-pub trait Expression: Node {
-    fn expression_node(&self);
-}
-
-#[derive(Debug)]
 pub struct Program {
-    pub statements: Vec<Box<dyn Statement>>,
+    pub statements: Vec<Statement>,
 }
 
-impl Node for Program {
-    fn token(&self) -> Token {
-        if self.statements.len() > 0 {
-            self.statements[0].token()
-        } else {
-            Token::EOF
+impl Program {
+    pub fn text(&self) -> String {
+        let mut text = String::new();
+        for s in self.statements.iter() {
+            text.push_str(&s.text());
+        }
+        return text;
+    }
+}
+
+#[derive(Debug)]
+pub enum Statement {
+    LetStatement(Identifier, Expression),
+    ReturnStatement(Expression),
+    ExpressionStatement(Expression),
+    BlockStatement(Vec<Statement>),
+}
+
+impl Statement {
+    pub fn text(&self) -> String {
+        match self {
+            Statement::LetStatement(i, e) => format!("let {} = {};", i.name, e.text()),
+            Statement::ReturnStatement(e) => format!("return {};", e.text()),
+            Statement::ExpressionStatement(e) => format!("{}", e.text()),
+            Statement::BlockStatement(s) => {
+                let mut text = String::new();
+                for s in s.iter() {
+                    text.push_str(&s.text());
+                }
+                return text;
+            }
         }
     }
-    fn text(&self) -> String {
-        let mut s = String::new();
-        for stmt in &self.statements {
-            s.push_str(&stmt.text());
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    IdentifierExpression(Identifier),
+    LiteralExpression(Literal),
+    PrefixExpression(Prefix, Box<Expression>),
+    InfixExpression(Box<Expression>, Infix, Box<Expression>),
+    IfExpression {
+        condition: Box<Expression>,
+        consequence: Box<Statement>,
+        alternative: Option<Box<Statement>>,
+    },
+    FunctionExpression {
+        parameters: Vec<Identifier>,
+        body: Box<Statement>,
+    },
+    CallExpression {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
+}
+
+impl Expression {
+    pub fn text(&self) -> String {
+        match self {
+            Expression::IdentifierExpression(i) => i.text(),
+            Expression::LiteralExpression(l) => l.text(),
+            Expression::PrefixExpression(op, e) => format!("({}{})", op.text(), e.text()),
+            Expression::InfixExpression(l, op, r) => {
+                format!("({} {} {})", l.text(), op.text(), r.text())
+            }
+            Expression::IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                let mut text = format!("if {} {}", condition.text(), consequence.text());
+                if let Some(a) = alternative {
+                    text.push_str(&format!("else {}", a.text()));
+                }
+                text
+            }
+            Expression::FunctionExpression { parameters, body } => {
+                let mut text = String::new();
+                text.push_str("fn(");
+                for (i, p) in parameters.iter().enumerate() {
+                    if i != 0 {
+                        text.push_str(", ");
+                    }
+                    text.push_str(&p.text());
+                }
+                text.push_str(") ");
+                text.push_str(&body.text());
+                text
+            }
+            Expression::CallExpression {
+                function,
+                arguments,
+            } => {
+                let mut text = String::new();
+                text.push_str(&function.text());
+                text.push_str("(");
+                for (i, a) in arguments.iter().enumerate() {
+                    if i != 0 {
+                        text.push_str(", ");
+                    }
+                    text.push_str(&a.text());
+                }
+                text.push_str(")");
+                text
+            }
         }
-        return s;
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
 #[derive(Debug)]
-pub struct LetStatement {
-    pub name: Identifier,
-    pub value: Box<dyn Expression>,
+pub enum Literal {
+    IntegerLiteral(i64),
+    BooleanLiteral(bool),
+    StringLiteral(String),
 }
 
-impl Node for LetStatement {
-    fn token(&self) -> Token {
-        Token::LET
-    }
-    fn text(&self) -> String {
-        format!("let {} = {};", self.name.text(), self.value.text())
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
+impl Literal {
+    pub fn text(&self) -> String {
+        match self {
+            Literal::IntegerLiteral(i) => i.to_string(),
+            Literal::BooleanLiteral(b) => b.to_string(),
+            Literal::StringLiteral(s) => s.clone(),
+        }
     }
 }
 
-impl Statement for LetStatement {
-    fn statement_node(&self) {}
+#[derive(Debug, PartialEq)]
+pub enum Prefix {
+    Bang,
+    Minus,
+}
+
+impl Prefix {
+    pub fn text(&self) -> String {
+        match self {
+            Prefix::Bang => "!".to_string(),
+            Prefix::Minus => "-".to_string(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct ReturnStatement {
-    pub value: Box<dyn Expression>,
-}
-
-impl Node for ReturnStatement {
-    fn token(&self) -> Token {
-        Token::RETURN
-    }
-    fn text(&self) -> String {
-        format!("return {};", self.value.text())
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Statement for ReturnStatement {
-    fn statement_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct ExpressionStatement {
-    pub token: Token,
-    pub expression: Box<dyn Expression>,
-}
-
-impl Node for ExpressionStatement {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        self.expression.text()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Statement for ExpressionStatement {
-    fn statement_node(&self) {}
-}
-
-#[derive(Debug, Clone)]
 pub struct Identifier {
-    pub token: Token,
+    pub name: String,
 }
 
-impl Node for Identifier {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        self.token.text()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
+impl Identifier {
+    pub fn text(&self) -> String {
+        return self.name.clone();
     }
 }
 
-impl Expression for Identifier {
-    fn expression_node(&self) {}
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum Precedence {
+    Lowest,
+    Equals,
+    LessGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call,
 }
 
-#[derive(Debug)]
-pub struct IntegerLiteral {
-    pub token: Token,
-    pub value: i64,
+#[derive(Debug, PartialEq)]
+pub enum Infix {
+    Plus,
+    Minus,
+    Asterisk,
+    Slash,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
 }
 
-impl Node for IntegerLiteral {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        self.token.text()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Expression for IntegerLiteral {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct FunctionLiteral {
-    pub parameters: Vec<Box<dyn Expression>>,
-    pub body: BlockStatement,
-}
-
-impl Node for FunctionLiteral {
-    fn token(&self) -> Token {
-        Token::FUNCTION
-    }
-    fn text(&self) -> String {
-        let mut s = String::new();
-        s.push_str("fn(");
-        for (i, param) in self.parameters.iter().enumerate() {
-            s.push_str(&param.text());
-            if i < self.parameters.len() - 1 {
-                s.push_str(", ");
-            }
+impl Infix {
+    pub fn text(&self) -> String {
+        match self {
+            Infix::Plus => "+".to_string(),
+            Infix::Minus => "-".to_string(),
+            Infix::Asterisk => "*".to_string(),
+            Infix::Slash => "/".to_string(),
+            Infix::Eq => "==".to_string(),
+            Infix::NotEq => "!=".to_string(),
+            Infix::Lt => "<".to_string(),
+            Infix::Gt => ">".to_string(),
         }
-        s.push_str(") ");
-        s.push_str(&self.body.text());
-        return s;
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
-impl Expression for FunctionLiteral {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct PrefixExpression {
-    pub token: Token,
-    pub right: Box<dyn Expression>,
-}
-
-impl Node for PrefixExpression {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        format!("({}{})", self.token.text(), self.right.text())
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Expression for PrefixExpression {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct InfixExpression {
-    pub token: Token,
-    pub left: Box<dyn Expression>,
-    pub right: Box<dyn Expression>,
-}
-
-impl Node for InfixExpression {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        format!(
-            "({} {} {})",
-            self.left.text(),
-            self.token.text(),
-            self.right.text()
-        )
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Expression for InfixExpression {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct BooleanExpression {
-    pub token: Token,
-}
-
-impl Node for BooleanExpression {
-    fn token(&self) -> Token {
-        self.token.clone()
-    }
-    fn text(&self) -> String {
-        self.token.text()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Expression for BooleanExpression {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct BlockStatement {
-    pub statements: Vec<Box<dyn Statement>>,
-}
-
-impl Node for BlockStatement {
-    fn token(&self) -> Token {
-        return Token::LBRACE;
-    }
-    fn text(&self) -> String {
-        let mut s = String::new();
-        for stmt in &self.statements {
-            s.push_str(&stmt.text());
-        }
-        return s;
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Statement for BlockStatement {
-    fn statement_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct IfExpression {
-    pub condition: Box<dyn Expression>,
-    pub consequence: BlockStatement,
-    pub alternative: Option<BlockStatement>,
-}
-
-impl Node for IfExpression {
-    fn token(&self) -> Token {
-        return Token::IF;
-    }
-    fn text(&self) -> String {
-        let mut s = format!("if {} {}", self.condition.text(), self.consequence.text());
-        if let Some(alt) = &self.alternative {
-            s.push_str(&format!("else {}", alt.text()));
-        }
-        return s;
-    }
-    fn as_any(&self) -> &dyn Any {
-        return self;
-    }
-}
-
-impl Expression for IfExpression {
-    fn expression_node(&self) {}
-}
-
-#[derive(Debug)]
-pub struct CallExpression {
-    pub function: Box<dyn Expression>,
-    pub arguments: Vec<Box<dyn Expression>>,
-}
-
-impl Node for CallExpression {
-    fn token(&self) -> Token {
-        return Token::LPAREN;
-    }
-    fn text(&self) -> String {
-        let mut s = String::new();
-        s.push_str(&self.function.text());
-        s.push_str("(");
-        for (i, arg) in self.arguments.iter().enumerate() {
-            s.push_str(&arg.text());
-            if i < self.arguments.len() - 1 {
-                s.push_str(", ");
-            }
-        }
-        s.push_str(")");
-        return s;
-    }
-    fn as_any(&self) -> &dyn Any {
-        return self;
-    }
-}
-
-impl Expression for CallExpression {
-    fn expression_node(&self) {}
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        ast::{Identifier, LetStatement, Node},
-        lexer::lexer::Token,
-    };
-
-    use super::Program;
-
-    #[test]
-    fn test_text() {
-        let empty_program = Program { statements: vec![] };
-        assert_eq!(empty_program.text(), "");
-
-        let program = Program {
-            statements: vec![Box::new(LetStatement {
-                name: Identifier {
-                    token: Token::IDENT("myVar".to_string()),
+#[test]
+fn test_text() {
+    let program = Program {
+        statements: vec![
+            Statement::LetStatement(
+                Identifier {
+                    name: "myVar".to_string(),
                 },
-                value: Box::new(Identifier {
-                    token: Token::IDENT("anotherVar".to_string()),
+                Expression::IdentifierExpression(Identifier {
+                    name: "aaa".to_string(),
                 }),
-            })],
-        };
-        assert_eq!(program.text(), "let myVar = anotherVar;");
-    }
+            ),
+            Statement::ReturnStatement(Expression::IdentifierExpression(Identifier {
+                name: "myVar".to_string(),
+            })),
+        ],
+    };
+    assert_eq!(program.text(), "let myVar = aaa;return myVar;");
 }
