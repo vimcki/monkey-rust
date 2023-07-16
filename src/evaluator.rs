@@ -10,7 +10,14 @@ impl Evaluator {
         Evaluator {}
     }
     pub fn eval_program(&mut self, program: Program) -> Object {
-        let result = self.eval_block_statement(&program.statements);
+        let mut result = Object::Null;
+        for statement in program.statements {
+            result = self.eval_statement(&statement);
+            match result {
+                Object::ReturnValue(x) => return x.as_ref().clone(),
+                _ => {}
+            }
+        }
         return result;
     }
 
@@ -47,17 +54,15 @@ impl Evaluator {
     }
 
     fn eval_block_statement(&mut self, statements: &Vec<Statement>) -> Object {
-        match statements.len() {
-            0 => Object::Null,
-            1 => self.eval_statement(&statements[0]),
-            _ => {
-                let mut evaluated = Object::Null;
-                for statement in statements {
-                    evaluated = self.eval_statement(&statement);
-                }
-                return evaluated;
+        let mut evaluated = Object::Null;
+        for statement in statements {
+            evaluated = self.eval_statement(&statement);
+            match evaluated {
+                Object::ReturnValue(_) => return evaluated,
+                _ => {}
             }
         }
+        return evaluated;
     }
 
     fn eval_statement(&mut self, statement: &Statement) -> Object {
@@ -67,6 +72,10 @@ impl Evaluator {
             }
             Statement::BlockStatement(statements) => {
                 return self.eval_block_statement(statements);
+            }
+            Statement::ReturnStatement(expression) => {
+                let obj = self.eval_expression(expression);
+                return Object::ReturnValue(Box::new(obj));
             }
             _ => {
                 todo!();
@@ -164,6 +173,7 @@ mod tests {
         let program = parser.parse_program();
         let program = program.unwrap();
         let evaluated = Evaluator::new().eval_program(program);
+        println!("input: {:?}", input);
         assert_eq!(evaluated, *expected);
     }
 
@@ -249,6 +259,23 @@ mod tests {
             ("if (1 > 2) { 10 }", Object::Null),
             ("if (1 > 2) { 10 } else { 20 }", Object::Integer(20)),
             ("if (1 < 2) { 10 } else { 20 }", Object::Integer(10)),
+        ];
+        for (input, expected) in tests {
+            compare(&String::from(input), &expected);
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let tests = vec![
+            ("return 10;", Object::Integer(10)),
+            ("return 10; 9;", Object::Integer(10)),
+            ("return 2 * 5; 9;", Object::Integer(10)),
+            ("9; return 2 * 5; 9;", Object::Integer(10)),
+            (
+                "if (10 > 1) { if (10 > 1) { return 10; } return 1; }",
+                Object::Integer(10),
+            ),
         ];
         for (input, expected) in tests {
             compare(&String::from(input), &expected);
