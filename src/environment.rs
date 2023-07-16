@@ -1,15 +1,25 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::object::Object;
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Environment {
     store: HashMap<String, Object>,
+    parent: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Environment {
             store: HashMap::new(),
+            parent: None,
+        }
+    }
+    pub fn new_with_outer(outer: Rc<RefCell<Environment>>) -> Self {
+        let mut hashmap = HashMap::new();
+        Environment {
+            store: hashmap,
+            parent: Some(outer),
         }
     }
 

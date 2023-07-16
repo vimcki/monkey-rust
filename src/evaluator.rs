@@ -1,17 +1,19 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
-    ast::{Expression, Infix, Literal, Prefix, Program, Statement},
+    ast::{Expression, Identifier, Infix, Literal, Prefix, Program, Statement},
     environment::Environment,
     object::Object,
 };
 
 pub struct Evaluator {
-    env: Environment,
+    env: Rc<RefCell<Environment>>,
 }
 
 impl Evaluator {
     pub fn new() -> Evaluator {
         Evaluator {
-            env: Environment::new(),
+            env: Rc::new(RefCell::new(Environment::new())),
         }
     }
     pub fn eval_program(&mut self, program: Program) -> Object {
@@ -54,15 +56,30 @@ impl Evaluator {
                 }
             }
             Expression::IdentifierExpression(ident) => {
-                let obj = self.env.get(&ident.name);
+                let obj = self.env.borrow().get(&ident.name);
                 match obj {
                     Some(o) => o,
                     None => Object::Error(format!("identifier not found: {}", ident.name)),
                 }
             }
-            _ => {
-                todo!();
+
+            Expression::FunctionExpression { parameters, body } => {
+                let statements = match body.as_ref() {
+                    Statement::BlockStatement(statements) => statements,
+                    _ => panic!("function body must be block statement"),
+                };
+                Object::Function(
+                    parameters.clone(),
+                    Program {
+                        statements: statements.clone(),
+                    },
+                    Rc::clone(&self.env),
+                )
             }
+            Expression::CallExpression {
+                function,
+                arguments,
+            } => self.eval_call(function.as_ref().clone(), arguments.clone()),
         }
     }
 
@@ -93,7 +110,7 @@ impl Evaluator {
             }
             Statement::LetStatement(ident, expression) => {
                 let obj = self.eval_expression(expression);
-                self.env.set(ident.name.clone(), obj.clone());
+                self.env.borrow_mut().set(ident.name.clone(), obj.clone());
                 return obj;
             }
         }
@@ -191,11 +208,59 @@ impl Evaluator {
             _ => true,
         }
     }
+    pub fn eval_call(&mut self, fn_expr: Expression, args_expr: Vec<Expression>) -> Object {
+        let fn_object = self.eval_expression(&fn_expr);
+        match fn_object {
+            Object::Function(params, body, f_env) => {
+                self.eval_fn_call(args_expr, params, body, &f_env)
+            }
+            _ => Object::Error(format!("not a function: {}", fn_object.typee())),
+        }
+    }
+
+    fn eval_fn_call(
+        &mut self,
+        args_expr: Vec<Expression>,
+        params: Vec<Identifier>,
+        program: Program,
+        f_env: &Rc<RefCell<Environment>>,
+    ) -> Object {
+        if args_expr.len() != params.len() {
+            Object::Error(format!(
+                "wrong number of arguments: {} expected but {} given",
+                params.len(),
+                args_expr.len()
+            ))
+        } else {
+            let args = args_expr
+                .into_iter()
+                .map(|e| self.eval_expression(&e))
+                .collect::<Vec<_>>();
+            let old_env = Rc::clone(&self.env);
+            let mut new_env = Environment::new_with_outer(Rc::clone(f_env));
+            let zipped = params.into_iter().zip(args);
+            for (_, (Identifier { name }, o)) in zipped.enumerate() {
+                new_env.set(name, o);
+            }
+            self.env = Rc::new(RefCell::new(new_env));
+            let object = self.eval_block_statement(&program.statements);
+            self.env = old_env;
+            return object;
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer::lexer::Lexer, object::Object, parser::Parser};
+    use std::{cell::RefCell, rc::Rc};
+
+    use crate::{
+        ast::{Expression, Identifier, Infix, Literal, Program, Statement},
+        environment::Environment,
+        lexer::lexer::Lexer,
+        object::Object,
+        parser::Parser,
+    };
 
     use super::Evaluator;
 
@@ -365,6 +430,59 @@ mod tests {
                 "let a = 5; let b = a; let c = a + b + 5; c;",
                 Object::Integer(15),
             ),
+        ];
+        for (input, expected) in tests {
+            compare(&String::from(input), &expected);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; };";
+        compare(
+            &String::from(input),
+            &Object::Function(
+                vec![Identifier {
+                    name: String::from("x"),
+                }],
+                Program {
+                    statements: vec![Statement::ExpressionStatement(Expression::InfixExpression(
+                        Box::new(Expression::IdentifierExpression(Identifier {
+                            name: String::from("x"),
+                        })),
+                        Infix::Plus,
+                        Box::new(Expression::LiteralExpression(Literal::IntegerLiteral(2))),
+                    ))],
+                },
+                Rc::new(RefCell::new(Environment::new())),
+            ),
+        );
+    }
+
+    #[test]
+    fn test_function_application() {
+        let tests = vec![
+            (
+                "let identity = fn(x) { x; }; identity(5);",
+                Object::Integer(5),
+            ),
+            (
+                "let identity = fn(x) { return x; }; identity(5);",
+                Object::Integer(5),
+            ),
+            (
+                "let double = fn(x) { x * 2; }; double(5);",
+                Object::Integer(10),
+            ),
+            (
+                "let add = fn(x, y) { x + y; }; add(5, 5);",
+                Object::Integer(10),
+            ),
+            (
+                "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));",
+                Object::Integer(20),
+            ),
+            ("fn(x) { x; }(5)", Object::Integer(5)),
         ];
         for (input, expected) in tests {
             compare(&String::from(input), &expected);

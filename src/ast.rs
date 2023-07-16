@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
@@ -12,7 +13,7 @@ impl Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     LetStatement(Identifier, Expression),
     ReturnStatement(Expression),
@@ -37,7 +38,7 @@ impl Statement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     IdentifierExpression(Identifier),
     LiteralExpression(Literal),
@@ -111,7 +112,7 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     IntegerLiteral(i64),
     BooleanLiteral(bool),
@@ -128,7 +129,7 @@ impl Literal {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Prefix {
     Bang,
     Minus,
@@ -143,7 +144,7 @@ impl Prefix {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
     pub name: String,
 }
@@ -165,7 +166,7 @@ pub enum Precedence {
     Call,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Infix {
     Plus,
     Minus,
