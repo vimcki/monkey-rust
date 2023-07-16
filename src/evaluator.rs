@@ -1,13 +1,18 @@
 use crate::{
     ast::{Expression, Infix, Literal, Prefix, Program, Statement},
+    environment::Environment,
     object::Object,
 };
 
-pub struct Evaluator {}
+pub struct Evaluator {
+    env: Environment,
+}
 
 impl Evaluator {
     pub fn new() -> Evaluator {
-        Evaluator {}
+        Evaluator {
+            env: Environment::new(),
+        }
     }
     pub fn eval_program(&mut self, program: Program) -> Object {
         let mut result = Object::Null;
@@ -15,6 +20,7 @@ impl Evaluator {
             result = self.eval_statement(&statement);
             match result {
                 Object::ReturnValue(x) => return x.as_ref().clone(),
+                Object::Error(_) => return result,
                 _ => {}
             }
         }
@@ -47,6 +53,13 @@ impl Evaluator {
                     return Object::Null;
                 }
             }
+            Expression::IdentifierExpression(ident) => {
+                let obj = self.env.get(&ident.name);
+                match obj {
+                    Some(o) => o,
+                    None => Object::Error(format!("identifier not found: {}", ident.name)),
+                }
+            }
             _ => {
                 todo!();
             }
@@ -59,6 +72,7 @@ impl Evaluator {
             evaluated = self.eval_statement(&statement);
             match evaluated {
                 Object::ReturnValue(_) => return evaluated,
+                Object::Error(_) => return evaluated,
                 _ => {}
             }
         }
@@ -77,8 +91,10 @@ impl Evaluator {
                 let obj = self.eval_expression(expression);
                 return Object::ReturnValue(Box::new(obj));
             }
-            _ => {
-                todo!();
+            Statement::LetStatement(ident, expression) => {
+                let obj = self.eval_expression(expression);
+                self.env.set(ident.name.clone(), obj.clone());
+                return obj;
             }
         }
     }
@@ -108,7 +124,7 @@ impl Evaluator {
             },
             Prefix::Minus => match obj {
                 Object::Integer(i) => return Object::Integer(-i),
-                _ => return Object::Null,
+                _ => return Object::Error(format!("unknown operator: -{}", obj.typee())),
             },
         }
     }
@@ -117,37 +133,53 @@ impl Evaluator {
         match op {
             Infix::Plus => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Integer(l + r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} + {}", x.typee(), y.typee()))
+                }
             },
             Infix::Minus => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Integer(l - r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} - {}", x.typee(), y.typee()))
+                }
             },
             Infix::Asterisk => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Integer(l * r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} * {}", x.typee(), y.typee()))
+                }
             },
             Infix::Slash => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Integer(l / r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} / {}", x.typee(), y.typee()))
+                }
             },
             Infix::Lt => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Boolean(l < r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} < {}", x.typee(), y.typee()))
+                }
             },
             Infix::Gt => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Boolean(l > r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} > {}", x.typee(), y.typee()))
+                }
             },
             Infix::Eq => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Boolean(l == r),
                 (Object::Boolean(l), Object::Boolean(r)) => return Object::Boolean(l == r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} == {}", x.typee(), y.typee()))
+                }
             },
             Infix::NotEq => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => return Object::Boolean(l != r),
                 (Object::Boolean(l), Object::Boolean(r)) => return Object::Boolean(l != r),
-                _ => return Object::Null,
+                (x, y) => {
+                    return Object::Error(format!("type mismatch: {} != {}", x.typee(), y.typee()))
+                }
             },
         }
     }
@@ -275,6 +307,63 @@ mod tests {
             (
                 "if (10 > 1) { if (10 > 1) { return 10; } return 1; }",
                 Object::Integer(10),
+            ),
+        ];
+        for (input, expected) in tests {
+            compare(&String::from(input), &expected);
+        }
+    }
+
+    #[test]
+    fn test_error_handling() {
+        let tests = vec![
+            (
+                "5 + true;",
+                Object::Error("type mismatch: INTEGER + BOOLEAN".to_string()),
+            ),
+            (
+                "5 + true; 5;",
+                Object::Error("type mismatch: INTEGER + BOOLEAN".to_string()),
+            ),
+            (
+                "-true",
+                Object::Error("unknown operator: -BOOLEAN".to_string()),
+            ),
+            (
+                "true + false;",
+                Object::Error("type mismatch: BOOLEAN + BOOLEAN".to_string()),
+            ),
+            (
+                "5; true + false; 5",
+                Object::Error("type mismatch: BOOLEAN + BOOLEAN".to_string()),
+            ),
+            (
+                "if (10 > 1) { true + false; }",
+                Object::Error("type mismatch: BOOLEAN + BOOLEAN".to_string()),
+            ),
+            (
+                "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }",
+                Object::Error("type mismatch: BOOLEAN + BOOLEAN".to_string()),
+            ),
+            (
+                "foobar",
+                Object::Error("identifier not found: foobar".to_string()),
+            ),
+        ];
+        for (input, expected) in tests {
+            compare(&String::from(input), &expected);
+        }
+    }
+
+    #[test]
+    fn test_let_statement() {
+        let tests = vec![
+            ("let a = 5; a;", Object::Integer(5)),
+            ("let a = 5 * 5; a;", Object::Integer(25)),
+            ("let a = 5; let b = a; b;", Object::Integer(5)),
+            (
+                "let a = 5; let b = a; let c = a + b + 5; c;",
+                Object::Integer(15),
             ),
         ];
         for (input, expected) in tests {

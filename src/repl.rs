@@ -5,6 +5,7 @@ use crate::parser::Parser;
 use std::io::{self, Write};
 
 pub fn start() -> Result<(), io::Error> {
+    let mut evaluator = Evaluator::new();
     loop {
         let mut input = String::new();
         print!(">> "); // Print the prompt
@@ -19,7 +20,6 @@ pub fn start() -> Result<(), io::Error> {
             println!("Parser error: {}", e);
             continue;
         }
-        let mut evaluator = Evaluator::new();
         println!("{}", evaluator.eval_program(program.unwrap()).inspect());
     }
 }
