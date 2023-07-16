@@ -7,7 +7,7 @@ mod repl;
 
 use std::io;
 
-use evaluator::eval_program;
+use evaluator::Evaluator;
 use repl::start;
 
 use crate::lexer::lexer::Lexer;
@@ -17,7 +17,8 @@ fn main() -> Result<(), io::Error> {
     let l = Lexer::new(vec![0]);
     let mut p = parser::Parser::new(l);
     let program = p.parse_program().unwrap();
-    let obj = eval_program(program);
+    let mut evaluator = Evaluator::new();
+    let obj = evaluator.eval_program(program);
 
     return res;
 }

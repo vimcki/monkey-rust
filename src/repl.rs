@@ -1,4 +1,4 @@
-use crate::lexer::lexer::Lexer;
+use crate::{evaluator::Evaluator, lexer::lexer::Lexer};
 
 use crate::parser::Parser;
 
@@ -15,9 +15,11 @@ pub fn start() -> Result<(), io::Error> {
         let l = Lexer::new(input.as_bytes().to_vec());
         let mut p = Parser::new(l);
         let program = p.parse_program();
-        match program {
-            Ok(p) => println!("{}", p.text()),
-            Err(e) => println!("{}", e),
+        if let Err(e) = program {
+            println!("Parser error: {}", e);
+            continue;
         }
+        let mut evaluator = Evaluator::new();
+        println!("{}", evaluator.eval_program(program.unwrap()).inspect());
     }
 }
